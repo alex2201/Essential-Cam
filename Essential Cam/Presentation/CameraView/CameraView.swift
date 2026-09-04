@@ -14,8 +14,8 @@ struct CameraView: View {
         VStack(spacing: .zero) {
             switch viewModel.cameraStatus {
             case .running:
-                CameraPreview(source: viewModel.previewSource)
-                    .statusBarHidden(true)
+                CameraPreview(session: viewModel.captureSession)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
             case .failed, .interrupted:
                 Text("Something went wrong")
             case .unauthorized:
@@ -23,11 +23,11 @@ struct CameraView: View {
             case .unknown:
                 ProgressView()
             }
-
         }
+        .background(Color.black)
+        .statusBarHidden(true)
         .task {
             await viewModel.start()
         }
-
     }
 }

@@ -5,23 +5,17 @@
 //  Created by Alexander López on 04/09/26.
 //
 
-
-import SwiftUI
 @preconcurrency import AVFoundation
+import SwiftUI
 
 struct CameraPreview: UIViewRepresentable {
-
-    private let source: PreviewSource
-
-    init(source: PreviewSource) {
-        self.source = source
-    }
+    let session: AVCaptureSession
 
     func makeUIView(context: Context) -> PreviewView {
-        let preview = PreviewView()
-        // Connect the preview layer to the capture session.
-        source.connect(to: preview)
-        return preview
+        let previewView = PreviewView()
+        previewView.previewLayer.session = session
+        previewView.previewLayer.videoGravity = .resizeAspect
+        return previewView
     }
 
     func updateUIView(_ previewView: PreviewView, context: Context) {
@@ -30,7 +24,7 @@ struct CameraPreview: UIViewRepresentable {
 }
 
 extension CameraPreview {
-    class PreviewView: UIView, PreviewTarget {
+    final class PreviewView: UIView {
 
         init() {
             super.init(frame: .zero)
@@ -58,35 +52,5 @@ extension CameraPreview {
         var previewLayer: AVCaptureVideoPreviewLayer {
             layer as! AVCaptureVideoPreviewLayer
         }
-
-        nonisolated func setSession(_ session: AVCaptureSession) {
-            // Connects the session with the preview layer, which allows the layer
-            // to provide a live view of the captured content.
-            Task { @MainActor in
-                previewLayer.session = session
-            }
-        }
-    }
-}
-
-protocol PreviewSource: Sendable {
-    func connect(to target: PreviewTarget)
-}
-
-protocol PreviewTarget {
-    // Sets the capture session on the destination.
-    func setSession(_ session: AVCaptureSession)
-}
-
-struct DefaultPreviewSource: PreviewSource {
-
-    private let session: AVCaptureSession
-
-    init(session: AVCaptureSession) {
-        self.session = session
-    }
-
-    func connect(to target: PreviewTarget) {
-        target.setSession(session)
     }
 }

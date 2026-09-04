@@ -5,7 +5,7 @@
 //  Created by Alexander López on 01/09/26.
 //
 
-import AVFoundation
+@preconcurrency import AVFoundation
 import Foundation
 
 @MainActor
@@ -13,28 +13,27 @@ import Foundation
 class CameraViewModel {
 
     var cameraStatus = CameraStatus.unknown
-    var previewSource: PreviewSource {
-        captureService.previewSource
-    }
+    let captureSession: AVCaptureSession
 
-    private let captureService: CaptureService
+    private let cameraSession: CameraSession
 
     init(
-        captureService: CaptureService = .init()
+        cameraSession: CameraSession = .init()
     ) {
-        self.captureService = captureService
+        captureSession = cameraSession.captureSession
+        self.cameraSession = cameraSession
     }
 
     func start() async {
         do {
-            try await captureService.start()
+            try await cameraSession.start()
             cameraStatus = .running
         } catch {
             switch error {
             case .unauthorized:
                 cameraStatus = .unauthorized
             case .setupFailed, .addInputFailed, .addOutputFailed:
-            cameraStatus = .failed
+                cameraStatus = .failed
             }
             print("Couldn't start capture: \(error.localizedDescription)")
         }
