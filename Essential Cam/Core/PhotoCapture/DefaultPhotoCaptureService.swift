@@ -1,5 +1,5 @@
 //
-//  DefaultPhotoCapture.swift
+//  DefaultPhotoCaptureService.swift
 //  Essential Cam
 //
 //  Created by Alexander López on 01/09/26.
@@ -7,14 +7,23 @@
 
 import AVFoundation
 
-final class DefaultPhotoCapture: PhotoCapture {
-    let output = AVCapturePhotoOutput()
+final class DefaultPhotoCaptureService: PhotoCaptureService {
+    var output: AVCaptureOutput {
+        photoOutput
+    }
+
+    private let photoOutput = AVCapturePhotoOutput()
+    private var activeCaptureDelegate: PhotoCaptureDelegate?
 
     func capturePhoto() async throws -> Photo {
-        try await withCheckedThrowingContinuation { continuation in
+        defer { activeCaptureDelegate = nil }
+
+        return try await withCheckedThrowingContinuation { continuation in
             let photoSettings = createPhotoSettings()
             let delegate = PhotoCaptureDelegate(continuation: continuation)
-            output.capturePhoto(with: photoSettings, delegate: delegate)
+
+            activeCaptureDelegate = delegate
+            photoOutput.capturePhoto(with: photoSettings, delegate: delegate)
         }
     }
 
@@ -23,7 +32,7 @@ final class DefaultPhotoCapture: PhotoCapture {
         var photoSettings = AVCapturePhotoSettings()
 
         // Capture photos in HEIF format when the device supports it.
-        if output.availablePhotoCodecTypes.contains(.hevc) {
+        if photoOutput.availablePhotoCodecTypes.contains(.hevc) {
             photoSettings = AVCapturePhotoSettings(format: [AVVideoCodecKey: AVVideoCodecType.hevc])
         }
 
@@ -33,8 +42,7 @@ final class DefaultPhotoCapture: PhotoCapture {
             photoSettings.previewPhotoFormat = [kCVPixelBufferPixelFormatTypeKey as String: previewPhotoPixelFormatType]
         }
 
-        photoSettings.maxPhotoDimensions = output.maxPhotoDimensions
-        photoSettings.photoQualityPrioritization = .quality
+        photoSettings.maxPhotoDimensions = photoOutput.maxPhotoDimensions
 
         return photoSettings
     }
@@ -50,8 +58,8 @@ private class PhotoCaptureDelegate: NSObject, AVCapturePhotoCaptureDelegate {
     typealias PhotoContinuation = CheckedContinuation<Photo, Error>
 
     private let continuation: PhotoContinuation
-
     private var photoData: Data?
+    private var processingError: Error?
 
     /// Creates a new delegate object with the checked continuation to call when processing is complete.
     init(continuation: PhotoContinuation) {
@@ -59,8 +67,8 @@ private class PhotoCaptureDelegate: NSObject, AVCapturePhotoCaptureDelegate {
     }
 
     func photoOutput(_ output: AVCapturePhotoOutput, didFinishProcessingPhoto photo: AVCapturePhoto, error: Error?) {
-        if let error = error {
-            print("Error capturing photo: \(String(describing: error))")
+        if let error {
+            processingError = error
             return
         }
         photoData = photo.fileDataRepresentation()
@@ -68,7 +76,7 @@ private class PhotoCaptureDelegate: NSObject, AVCapturePhotoCaptureDelegate {
 
     func photoOutput(_ output: AVCapturePhotoOutput, didFinishCaptureFor resolvedSettings: AVCaptureResolvedPhotoSettings, error: Error?) {
         // If an error occurs, resume the continuation by throwing an error, and return.
-        if let error {
+        if let error = error ?? processingError {
             continuation.resume(throwing: error)
             return
         }

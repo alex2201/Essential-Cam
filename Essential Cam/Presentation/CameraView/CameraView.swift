@@ -14,8 +14,7 @@ struct CameraView: View {
         VStack(spacing: .zero) {
             switch viewModel.cameraStatus {
             case .running:
-                CameraPreview(session: viewModel.captureSession)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
+                CameraCaptureView(viewModel: viewModel)
             case .failed, .interrupted:
                 Text("Something went wrong")
             case .unauthorized:
@@ -28,6 +27,26 @@ struct CameraView: View {
         .statusBarHidden(true)
         .task {
             await viewModel.start()
+        }
+    }
+}
+
+extension CameraView {
+    struct CameraCaptureView: View {
+        let viewModel: CameraViewModel
+
+        var body: some View {
+            VStack(spacing: .zero) {
+                CameraPreview(session: viewModel.captureSession)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
+                Button(action: viewModel.captureAction) {
+                    Circle()
+                        .fill()
+                        .foregroundStyle(.red)
+                        .frame(width: 40, height: 40)
+                }
+                .disabled(viewModel.isPerformingCaptureOperation)
+            }
         }
     }
 }

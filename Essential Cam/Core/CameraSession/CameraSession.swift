@@ -15,7 +15,8 @@ actor CameraSession {
         label: "com.alexanderlopez.Essential-Cam.capture-session"
     )
     private let deviceLookup: any CameraDeviceLookup
-    private let photoCapture: any PhotoCapture
+    private let photoCaptureService: any PhotoCaptureService
+    private let videoCaptureService: any VideoCaptureService
     private var activeVideoInput: AVCaptureDeviceInput?
     private var isSetUp = false
 
@@ -26,11 +27,13 @@ actor CameraSession {
     init(
         captureSession: AVCaptureSession = .init(),
         deviceLookup: any CameraDeviceLookup = DefaultCameraDeviceLookup(),
-        photoCapture: any PhotoCapture = DefaultPhotoCapture()
+        photoCaptureService: any PhotoCaptureService = DefaultPhotoCaptureService(),
+        videoCaptureService: any VideoCaptureService = DefaultVideoCaptureService()
     ) {
         self.captureSession = captureSession
         self.deviceLookup = deviceLookup
-        self.photoCapture = photoCapture
+        self.photoCaptureService = photoCaptureService
+        self.videoCaptureService = videoCaptureService
     }
 
     func start() async throws(CameraSessionError) {
@@ -63,7 +66,12 @@ actor CameraSession {
 
         activeVideoInput = try addInput(for: defaultCamera)
         captureSession.sessionPreset = .photo
-        try addOutput(photoCapture.output)
+
+        let captures: [any CameraCaptureComponent] = [photoCaptureService, videoCaptureService]
+        for capture in captures {
+            try addOutput(capture.output)
+            capture.updateConfiguration(for: defaultCamera)
+        }
 
         isSetUp = true
     }
@@ -111,5 +119,11 @@ actor CameraSession {
         guard await AVCaptureDevice.requestAccess(for: .video) else {
             throw .unauthorized
         }
+    }
+}
+
+extension CameraSession: PhotoCapturing {
+    func capturePhoto() async throws -> Photo {
+        try await photoCaptureService.capturePhoto()
     }
 }

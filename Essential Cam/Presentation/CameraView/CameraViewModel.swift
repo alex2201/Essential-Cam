@@ -13,14 +13,17 @@ import Foundation
 class CameraViewModel {
 
     var cameraStatus = CameraStatus.unknown
-    let captureSession: AVCaptureSession
+    var isPerformingCaptureOperation = false
+
+    var captureSession: AVCaptureSession {
+        cameraSession.captureSession
+    }
 
     private let cameraSession: CameraSession
 
     init(
         cameraSession: CameraSession = .init()
     ) {
-        captureSession = cameraSession.captureSession
         self.cameraSession = cameraSession
     }
 
@@ -36,6 +39,23 @@ class CameraViewModel {
                 cameraStatus = .failed
             }
             print("Couldn't start capture: \(error.localizedDescription)")
+        }
+    }
+
+    func captureAction() {
+        guard !isPerformingCaptureOperation else { return }
+        isPerformingCaptureOperation = true
+
+        Task {
+            defer { isPerformingCaptureOperation = false }
+
+            let useCase = PhotoCaptureUseCase(photoCapture: cameraSession)
+
+            do {
+                _ = try await useCase.execute()
+            } catch {
+                print("Couldn't capture photo: \(error.localizedDescription)")
+            }
         }
     }
 }
