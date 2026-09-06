@@ -17,8 +17,10 @@ actor CameraSession {
     private let deviceLookup: any CameraDeviceLookup
     private let photoCaptureService: any PhotoCaptureService
     private let videoCaptureService: any VideoCaptureService
+    
     private var activeVideoInput: AVCaptureDeviceInput?
     private var isSetUp = false
+    private var selectedCameraPosition = Camera.Position.back
 
     nonisolated var unownedExecutor: UnownedSerialExecutor {
         sessionQueue.asUnownedSerialExecutor()
@@ -50,10 +52,57 @@ actor CameraSession {
         captureSession.stopRunning()
     }
 
+    func availableCameras() -> [Camera] {
+        selectedCameraDevices.compactMap {
+            $0.toDomainModel(displayZoomFactor: deviceLookup.displayZoomFactor(for: $0))
+        }
+    }
+
+    func selectCamera(id: Camera.ID) throws(CameraSessionError) {
+        guard isSetUp else {
+            throw .setupFailed
+        }
+
+        guard let device = selectedCameraDevices.first(where: { $0.uniqueID == id }) else {
+            throw .cameraNotFound
+        }
+
+        guard activeVideoInput?.device.uniqueID != id else { return }
+
+        let newInput: AVCaptureDeviceInput
+        do {
+            newInput = try AVCaptureDeviceInput(device: device)
+        } catch {
+            throw .addInputFailed
+        }
+
+        captureSession.beginConfiguration()
+        defer { captureSession.commitConfiguration() }
+
+        let previousInput = activeVideoInput
+        if let previousInput {
+            captureSession.removeInput(previousInput)
+        }
+
+        guard captureSession.canAddInput(newInput) else {
+            if let previousInput, captureSession.canAddInput(previousInput) {
+                captureSession.addInput(previousInput)
+            }
+            throw .addInputFailed
+        }
+
+        captureSession.addInput(newInput)
+        activeVideoInput = newInput
+
+        for capture in captureComponents {
+            capture.updateConfiguration(for: device)
+        }
+    }
+
     private func setUp() throws(CameraSessionError) {
         guard !isSetUp else { return }
 
-        guard let defaultCamera = deviceLookup.mainBackCamera ?? deviceLookup.mainFrontCamera else {
+        guard let defaultCamera = getDefaultCamera() else {
             throw .setupFailed
         }
 
@@ -67,13 +116,34 @@ actor CameraSession {
         activeVideoInput = try addInput(for: defaultCamera)
         captureSession.sessionPreset = .photo
 
-        let captures: [any CameraCaptureComponent] = [photoCaptureService, videoCaptureService]
-        for capture in captures {
+        for capture in captureComponents {
             try addOutput(capture.output)
             capture.updateConfiguration(for: defaultCamera)
         }
 
         isSetUp = true
+    }
+    
+    private func getDefaultCamera() -> AVCaptureDevice? {
+        switch selectedCameraPosition {
+        case .front:
+            return deviceLookup.mainFrontCamera
+        case .back:
+            return deviceLookup.mainBackCamera
+        }
+    }
+
+    private var selectedCameraDevices: [AVCaptureDevice] {
+        switch selectedCameraPosition {
+        case .front:
+            return deviceLookup.frontCameras
+        case .back:
+            return deviceLookup.backCameras
+        }
+    }
+
+    private var captureComponents: [any CameraCaptureComponent] {
+        [photoCaptureService, videoCaptureService]
     }
 
     @discardableResult

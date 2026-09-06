@@ -14,6 +14,9 @@ class CameraViewModel {
 
     var cameraStatus = CameraStatus.unknown
     var isPerformingCaptureOperation = false
+    var capturedPhotoPreview: CGImage?
+    var isPhotoPreviewPresented = false
+    private(set) var availableCameras: [Camera] = []
 
     var captureSession: AVCaptureSession {
         cameraSession.captureSession
@@ -31,11 +34,12 @@ class CameraViewModel {
         do {
             try await cameraSession.start()
             cameraStatus = .running
+            availableCameras = await cameraSession.availableCameras()
         } catch {
             switch error {
             case .unauthorized:
                 cameraStatus = .unauthorized
-            case .setupFailed, .addInputFailed, .addOutputFailed:
+            case .setupFailed, .cameraNotFound, .addInputFailed, .addOutputFailed:
                 cameraStatus = .failed
             }
             print("Couldn't start capture: \(error.localizedDescription)")
@@ -49,12 +53,27 @@ class CameraViewModel {
         Task {
             defer { isPerformingCaptureOperation = false }
 
-            let useCase = PhotoCaptureUseCase(photoCapture: cameraSession)
+            let useCase = PhotoCaptureUseCase(
+                photoCapture: cameraSession,
+                photoSaving: DefaultPhotoLibrary()
+            )
 
             do {
-                _ = try await useCase.execute()
+                let photo = try await useCase.execute()
+                capturedPhotoPreview = photo.previewImage
+                isPhotoPreviewPresented = photo.previewImage != nil
             } catch {
                 print("Couldn't capture photo: \(error.localizedDescription)")
+            }
+        }
+    }
+
+    func selectCamera(_ camera: Camera) {
+        Task {
+            do {
+                try await cameraSession.selectCamera(id: camera.id)
+            } catch {
+                print("Couldn't select camera: \(error.localizedDescription)")
             }
         }
     }

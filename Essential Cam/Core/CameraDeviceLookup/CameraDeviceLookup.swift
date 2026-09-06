@@ -14,4 +14,5 @@ protocol CameraDeviceLookup {
     var availableCameras: [AVCaptureDevice] { get }
     var mainBackCamera: AVCaptureDevice? { get }
     var mainFrontCamera: AVCaptureDevice? { get }
+    func displayZoomFactor(for device: AVCaptureDevice) -> Double?
 }

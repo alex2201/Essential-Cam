@@ -12,6 +12,9 @@ struct CameraView: View {
 
     var body: some View {
         VStack(spacing: .zero) {
+            ForEach(viewModel.availableCameras) { camera in
+                Text(camera.name + (camera.displayZoomFactor?.formatted() ?? ""))
+            }
             switch viewModel.cameraStatus {
             case .running:
                 CameraCaptureView(viewModel: viewModel)
@@ -28,10 +31,30 @@ struct CameraView: View {
         .task {
             await viewModel.start()
         }
+        .sheet(isPresented: $viewModel.isPhotoPreviewPresented) {
+            if let previewImage = viewModel.capturedPhotoPreview {
+                CapturedPhotoPreview(previewImage: previewImage)
+                    .onDisappear {
+                        viewModel.capturedPhotoPreview = nil
+                    }
+            }
+        }
     }
 }
 
 extension CameraView {
+    struct CapturedPhotoPreview: View {
+        let previewImage: CGImage
+
+        var body: some View {
+            Image(decorative: previewImage, scale: 1)
+                .resizable()
+                .scaledToFit()
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .background(Color.black)
+        }
+    }
+
     struct CameraCaptureView: View {
         let viewModel: CameraViewModel
 

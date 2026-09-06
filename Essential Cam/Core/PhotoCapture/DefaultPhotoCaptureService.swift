@@ -6,6 +6,8 @@
 //
 
 import AVFoundation
+import CoreImage
+import ImageIO
 
 final class DefaultPhotoCaptureService: PhotoCaptureService {
     var output: AVCaptureOutput {
@@ -59,6 +61,7 @@ private class PhotoCaptureDelegate: NSObject, AVCapturePhotoCaptureDelegate {
 
     private let continuation: PhotoContinuation
     private var photoData: Data?
+    private var previewImage: CGImage?
     private var processingError: Error?
 
     /// Creates a new delegate object with the checked continuation to call when processing is complete.
@@ -72,6 +75,33 @@ private class PhotoCaptureDelegate: NSObject, AVCapturePhotoCaptureDelegate {
             return
         }
         photoData = photo.fileDataRepresentation()
+        previewImage = makeOrientedPreviewImage(from: photo)
+    }
+
+    private func makeOrientedPreviewImage(from photo: AVCapturePhoto) -> CGImage? {
+        guard let previewImage = photo.previewCGImageRepresentation() else {
+            return nil
+        }
+
+        guard
+            let orientationValue = photo.metadata[String(kCGImagePropertyOrientation)] as? UInt32,
+            let orientation = CGImagePropertyOrientation(rawValue: orientationValue),
+            orientation != .up
+        else {
+            return previewImage
+        }
+
+        let orientedPreview = CIImage(cgImage: previewImage)
+            .oriented(orientation)
+
+        return CIContext().createCGImage(
+            orientedPreview,
+            from: orientedPreview.extent
+        )
+    }
+
+    func photoOutput(_ output: AVCapturePhotoOutput, didFinishCapturingDeferredPhotoProxy deferredPhotoProxy: AVCaptureDeferredPhotoProxy?, error: (any Error)?) {
+        print("Received a deferred photo proxy")
     }
 
     func photoOutput(_ output: AVCapturePhotoOutput, didFinishCaptureFor resolvedSettings: AVCaptureResolvedPhotoSettings, error: Error?) {
@@ -88,7 +118,7 @@ private class PhotoCaptureDelegate: NSObject, AVCapturePhotoCaptureDelegate {
         }
 
         /// Create a photo object to save to the `MediaLibrary`.
-        let photo = Photo(data: photoData)
+        let photo = Photo(data: photoData, previewImage: previewImage)
         // Resume the continuation by returning the captured photo.
         continuation.resume(returning: photo)
     }

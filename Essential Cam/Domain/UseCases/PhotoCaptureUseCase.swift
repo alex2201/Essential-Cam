@@ -5,10 +5,23 @@
 //  Created by Alexander López on 04/09/26.
 //
 
+protocol PhotoCapturing: Sendable {
+    func capturePhoto() async throws -> Photo
+}
+
+protocol PhotoSaving: Sendable {
+    func save(_ photo: Photo) async throws
+}
+
 struct PhotoCaptureUseCase {
     let photoCapture: any PhotoCapturing
+    let photoSaving: any PhotoSaving
 
+    // Returns proxy photo to show quick preview to the user
     func execute() async throws -> Photo {
-        try await photoCapture.capturePhoto()
+        let photo = try await photoCapture.capturePhoto()
+        try await photoSaving.save(photo)
+
+        return photo
     }
 }

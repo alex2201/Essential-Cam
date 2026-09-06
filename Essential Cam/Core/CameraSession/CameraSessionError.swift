@@ -8,6 +8,7 @@
 enum CameraSessionError: Error {
     case unauthorized
     case setupFailed
+    case cameraNotFound
     case addInputFailed
     case addOutputFailed
 }

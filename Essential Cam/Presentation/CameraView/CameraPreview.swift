@@ -32,7 +32,8 @@ extension CameraPreview {
             // The capture APIs require running on a real device. If running
             // in Simulator, display a static image to represent the video feed.
             let imageView = UIImageView()
-            imageView.image = UIImage(named: "video_mode")
+            // TODO: Add asset for simulator
+            //            imageView.image = UIImage(named: "video_mode")
             imageView.contentMode = .scaleAspectFill
             // The image view resizes to fill the preview area.
             imageView.autoresizingMask = [.flexibleWidth, .flexibleHeight]
