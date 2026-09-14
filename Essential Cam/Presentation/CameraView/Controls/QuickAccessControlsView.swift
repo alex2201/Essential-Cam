@@ -9,17 +9,36 @@ struct QuickAccessControlsView: View {
     let viewModel: CameraViewModel
 
     var body: some View {
+        Group {
+            if #available(iOS 26.0, *) {
+                controls
+                    .glassEffect(
+                        .regular,
+                        in: .rect(cornerRadius: 12)
+                    )
+            } else {
+                controls
+                    .background {
+                        RoundedRectangle(cornerRadius: 12)
+                            .fill(Color.black.opacity(0.4))
+                    }
+            }
+        }
+        .frame(maxWidth: 45)
+        .padding(.horizontal, 8)
+    }
+
+    private var controls: some View {
         VStack(spacing: 8) {
             Menu {
                 ForEach(CameraAspectRatio.allCases, id: \.self) { ratio in
                     Button {
                         viewModel.cameraSettings.aspectRatio = ratio
                     } label: {
-                        if ratio == viewModel.cameraSettings.aspectRatio {
-                            Label(ratio.displayName, systemImage: "checkmark")
-                        } else {
-                            Text(ratio.displayName)
-                        }
+                        settingLabel(
+                            ratio.displayName,
+                            isSelected: ratio == viewModel.cameraSettings.aspectRatio
+                        )
                     }
                 }
             } label: {
@@ -33,20 +52,82 @@ struct QuickAccessControlsView: View {
 
             separator
 
-            VStack(spacing: 4) {
-                Text("EV")
-                    .font(.system(size: 12, weight: .semibold))
-                Text("2.35")
-                    .font(.system(size: 10))
+            Menu {
+                ForEach(ExposureSetting.exposureBiasOptions, id: \.self) { exposureBias in
+                    Button {
+                        viewModel.cameraSettings.exposure = viewModel
+                            .cameraSettings
+                            .exposure
+                            .settingExposureBias(exposureBias)
+                    } label: {
+                        settingLabel(
+                            exposureBias.exposureBiasDisplayName,
+                            isSelected: viewModel.cameraSettings.exposure
+                                .hasExposureBias(exposureBias)
+                        )
+                    }
+                }
+            } label: {
+                VStack(spacing: 4) {
+                    Text("EV")
+                        .font(.system(size: 12, weight: .semibold))
+                    Text(viewModel.cameraSettings.exposure.displayName)
+                        .font(.system(size: 10))
+                }
             }
 
             separator
 
-            VStack(spacing: 4) {
-                Text("AF")
-                    .font(.system(size: 12, weight: .semibold))
-                Text("200.0")
-                    .font(.system(size: 10))
+            Menu {
+                Button {
+                    viewModel.cameraSettings.focus = .auto
+                } label: {
+                    settingLabel(
+                        "Auto",
+                        isSelected: viewModel.cameraSettings.focus == .auto
+                    )
+                }
+
+                Button {
+                    viewModel.cameraSettings.focus = .continuousAuto
+                } label: {
+                    settingLabel(
+                        "Continuous auto",
+                        isSelected: viewModel.cameraSettings.focus == .continuousAuto
+                    )
+                }
+
+                Button {
+                    viewModel.cameraSettings.focus = .locked
+                } label: {
+                    settingLabel(
+                        "Locked",
+                        isSelected: viewModel.cameraSettings.focus == .locked
+                    )
+                }
+
+                Menu("Manual") {
+                    ForEach(FocusSetting.manualLensPositionOptions, id: \.self) { lensPosition in
+                        Button {
+                            viewModel.cameraSettings.focus = .manual(
+                                lensPosition: lensPosition
+                            )
+                        } label: {
+                            settingLabel(
+                                lensPosition.lensPositionDisplayName,
+                                isSelected: viewModel.cameraSettings.focus
+                                    .hasLensPosition(lensPosition)
+                            )
+                        }
+                    }
+                }
+            } label: {
+                VStack(spacing: 4) {
+                    Text("AF")
+                        .font(.system(size: 12, weight: .semibold))
+                    Text(viewModel.cameraSettings.focus.displayName)
+                        .font(.system(size: 10))
+                }
             }
 
             separator
@@ -58,6 +139,7 @@ struct QuickAccessControlsView: View {
                 Image(systemName: "ellipsis")
                     .font(.system(size: 16, weight: .semibold))
                     .frame(maxWidth: .infinity)
+                    .padding(.vertical, 4)
                     .contentShape(Rectangle())
             }
             .accessibilityLabel("More camera settings")
@@ -65,12 +147,6 @@ struct QuickAccessControlsView: View {
         .font(.caption)
         .foregroundStyle(Color.white)
         .padding(.vertical, 12)
-        .background {
-            RoundedRectangle(cornerRadius: 12)
-                .fill(Color.black.opacity(0.4))
-        }
-        .frame(maxWidth: 45)
-        .padding(.horizontal, 8)
     }
 
     private var separator: some View {
