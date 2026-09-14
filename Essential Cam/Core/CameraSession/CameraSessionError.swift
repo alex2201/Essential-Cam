@@ -11,4 +11,5 @@ enum CameraSessionError: Error {
     case cameraNotFound
     case addInputFailed
     case addOutputFailed
+    case configurationFailed
 }

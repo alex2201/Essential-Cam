@@ -58,6 +58,25 @@ actor CameraSession {
         }
     }
 
+    func apply(_ settings: CameraSettings) throws(CameraSessionError) {
+        guard isSetUp, let device = activeVideoInput?.device else {
+            throw .setupFailed
+        }
+
+        do {
+            try device.lockForConfiguration()
+        } catch {
+            throw .configurationFailed
+        }
+
+        defer { device.unlockForConfiguration() }
+
+        apply(settings.exposure, to: device)
+        apply(settings.focus, to: device)
+        apply(settings.whiteBalance, to: device)
+        apply(settings.avFoundationZoomFactor, to: device)
+    }
+
     func selectCamera(id: Camera.ID) throws(CameraSessionError) {
         guard isSetUp else {
             throw .setupFailed
@@ -144,6 +163,96 @@ actor CameraSession {
 
     private var captureComponents: [any CameraCaptureComponent] {
         [photoCaptureService, videoCaptureService]
+    }
+
+    private func apply(
+        _ exposure: ExposureSetting,
+        to device: AVCaptureDevice
+    ) {
+        switch exposure.avFoundationConfiguration {
+        case let .mode(mode, exposureBias):
+            guard device.isExposureModeSupported(mode) else { return }
+
+            device.exposureMode = mode
+
+            if let exposureBias {
+                let supportedBias = min(
+                    max(exposureBias, device.minExposureTargetBias),
+                    device.maxExposureTargetBias
+                )
+                device.setExposureTargetBias(supportedBias)
+            }
+        case let .manual(iso, duration):
+            guard device.isExposureModeSupported(.custom) else { return }
+
+            let supportedISO = min(
+                max(iso, device.activeFormat.minISO),
+                device.activeFormat.maxISO
+            )
+            let supportedDurationInSeconds = min(
+                max(
+                    duration.seconds,
+                    device.activeFormat.minExposureDuration.seconds
+                ),
+                device.activeFormat.maxExposureDuration.seconds
+            )
+            let supportedDuration = CMTime(
+                seconds: supportedDurationInSeconds,
+                preferredTimescale: duration.timescale
+            )
+
+            device.setExposureModeCustom(
+                duration: supportedDuration,
+                iso: supportedISO
+            )
+        }
+    }
+
+    private func apply(
+        _ focus: FocusSetting,
+        to device: AVCaptureDevice
+    ) {
+        switch focus.avFoundationConfiguration {
+        case let .mode(mode):
+            guard device.isFocusModeSupported(mode) else { return }
+            device.focusMode = mode
+        case let .manual(lensPosition):
+            guard device.isFocusModeSupported(.locked) else { return }
+            device.setFocusModeLocked(
+                lensPosition: min(max(lensPosition, 0), 1)
+            )
+        }
+    }
+
+    private func apply(
+        _ whiteBalance: WhiteBalanceSetting,
+        to device: AVCaptureDevice
+    ) {
+        switch whiteBalance.avFoundationConfiguration {
+        case let .mode(mode):
+            guard device.isWhiteBalanceModeSupported(mode) else { return }
+            device.whiteBalanceMode = mode
+        case let .manual(temperatureAndTint):
+            guard device.isWhiteBalanceModeSupported(.locked) else { return }
+
+            let gains = device.deviceWhiteBalanceGains(for: temperatureAndTint)
+            let supportedGains = AVCaptureDevice.WhiteBalanceGains(
+                redGain: min(max(gains.redGain, 1), device.maxWhiteBalanceGain),
+                greenGain: min(max(gains.greenGain, 1), device.maxWhiteBalanceGain),
+                blueGain: min(max(gains.blueGain, 1), device.maxWhiteBalanceGain)
+            )
+            device.setWhiteBalanceModeLocked(with: supportedGains)
+        }
+    }
+
+    private func apply(
+        _ zoomFactor: CGFloat,
+        to device: AVCaptureDevice
+    ) {
+        device.videoZoomFactor = min(
+            max(zoomFactor, device.minAvailableVideoZoomFactor),
+            device.maxAvailableVideoZoomFactor
+        )
     }
 
     @discardableResult

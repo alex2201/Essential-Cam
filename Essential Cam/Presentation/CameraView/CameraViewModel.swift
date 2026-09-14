@@ -16,7 +16,12 @@ class CameraViewModel {
     var isPerformingCaptureOperation = false
     var capturedPhotoPreview: CGImage?
     var isPhotoPreviewPresented = false
-    var cameraSettings = CameraSettings.standard
+    var cameraSettings = CameraSettings.standard {
+        didSet {
+            guard cameraSettings != oldValue else { return }
+            applyCameraSettings()
+        }
+    }
     private(set) var captureOrientation = CaptureOrientation.portrait
     private(set) var availableCameras: [Camera] = []
 
@@ -37,11 +42,13 @@ class CameraViewModel {
             try await cameraSession.start()
             cameraStatus = .running
             availableCameras = await cameraSession.availableCameras()
+            applyCameraSettings()
         } catch {
             switch error {
             case .unauthorized:
                 cameraStatus = .unauthorized
-            case .setupFailed, .cameraNotFound, .addInputFailed, .addOutputFailed:
+            case .setupFailed, .cameraNotFound, .addInputFailed,
+                    .addOutputFailed, .configurationFailed:
                 cameraStatus = .failed
             }
             print("Couldn't start capture: \(error.localizedDescription)")
@@ -74,8 +81,21 @@ class CameraViewModel {
         Task {
             do {
                 try await cameraSession.selectCamera(id: camera.id)
+                try await cameraSession.apply(cameraSettings)
             } catch {
                 print("Couldn't select camera: \(error.localizedDescription)")
+            }
+        }
+    }
+
+    private func applyCameraSettings() {
+        let settings = cameraSettings
+
+        Task {
+            do {
+                try await cameraSession.apply(settings)
+            } catch {
+                print("Couldn't apply camera settings: \(error.localizedDescription)")
             }
         }
     }
