@@ -16,6 +16,8 @@ class CameraViewModel {
     var isPerformingCaptureOperation = false
     var capturedPhotoPreview: CGImage?
     var isPhotoPreviewPresented = false
+    var cameraSettings = CameraSettings.standard
+    private(set) var captureOrientation = CaptureOrientation.portrait
     private(set) var availableCameras: [Camera] = []
 
     var captureSession: AVCaptureSession {

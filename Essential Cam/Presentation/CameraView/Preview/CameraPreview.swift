@@ -14,7 +14,7 @@ struct CameraPreview: UIViewRepresentable {
     func makeUIView(context: Context) -> PreviewView {
         let previewView = PreviewView()
         previewView.previewLayer.session = session
-        previewView.previewLayer.videoGravity = .resizeAspect
+        previewView.previewLayer.videoGravity = .resizeAspectFill
         return previewView
     }
 
@@ -25,9 +25,21 @@ struct CameraPreview: UIViewRepresentable {
 
 extension CameraPreview {
     final class PreviewView: UIView {
+        private let contentView = PreviewContentView()
 
         init() {
             super.init(frame: .zero)
+
+            contentView.translatesAutoresizingMaskIntoConstraints = false
+            addSubview(contentView)
+
+            NSLayoutConstraint.activate([
+                contentView.topAnchor.constraint(equalTo: safeAreaLayoutGuide.topAnchor),
+                contentView.leadingAnchor.constraint(equalTo: safeAreaLayoutGuide.leadingAnchor),
+                contentView.bottomAnchor.constraint(equalTo: safeAreaLayoutGuide.bottomAnchor),
+                contentView.trailingAnchor.constraint(equalTo: safeAreaLayoutGuide.trailingAnchor)
+            ])
+
 #if targetEnvironment(simulator)
             // The capture APIs require running on a real device. If running
             // in Simulator, display a static image to represent the video feed.
@@ -37,7 +49,7 @@ extension CameraPreview {
             imageView.contentMode = .scaleAspectFill
             // The image view resizes to fill the preview area.
             imageView.autoresizingMask = [.flexibleWidth, .flexibleHeight]
-            addSubview(imageView)
+            contentView.addSubview(imageView)
 #endif
         }
 
@@ -45,7 +57,12 @@ extension CameraPreview {
             fatalError("init(coder:) has not been implemented")
         }
 
-        // Use the preview layer as the view's backing layer.
+        var previewLayer: AVCaptureVideoPreviewLayer {
+            contentView.previewLayer
+        }
+    }
+
+    final class PreviewContentView: UIView {
         override class var layerClass: AnyClass {
             AVCaptureVideoPreviewLayer.self
         }
