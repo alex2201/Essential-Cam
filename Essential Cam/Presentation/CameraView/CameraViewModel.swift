@@ -24,6 +24,9 @@ class CameraViewModel {
     }
     private(set) var captureOrientation = CaptureOrientation.portrait
     private(set) var availableCameras: [Camera] = []
+    private(set) var exposureBiasRange: ClosedRange<Double> = 0...0
+    private(set) var exposureISORange: ClosedRange<Double> = 1...1
+    private(set) var exposureDurationRange: ClosedRange<Double> = 1...1
 
     var captureSession: AVCaptureSession {
         cameraSession.captureSession
@@ -34,6 +37,9 @@ class CameraViewModel {
     private let settingsApplicationInterval: Duration = .milliseconds(100)
     private var settingsApplicationTask: Task<Void, Never>?
     private var lastSettingsApplication: ContinuousClock.Instant?
+    private var automaticExposureBias: Float = 0
+    private var manualExposureISO: Float = 1
+    private var manualExposureDurationInSeconds: Double = 1
 
     init(
         cameraSession: CameraSession = .init()
@@ -44,8 +50,9 @@ class CameraViewModel {
     func start() async {
         do {
             try await cameraSession.start()
-            cameraStatus = .running
             availableCameras = await cameraSession.availableCameras()
+            await updateExposureCapabilities()
+            cameraStatus = .running
             applyCameraSettingsImmediately()
         } catch {
             switch error {
@@ -85,11 +92,46 @@ class CameraViewModel {
         Task {
             do {
                 try await cameraSession.selectCamera(id: camera.id)
+                await updateExposureCapabilities()
                 try await cameraSession.apply(cameraSettings)
             } catch {
                 print("Couldn't select camera: \(error.localizedDescription)")
             }
         }
+    }
+
+    func useAutomaticExposure() {
+        cameraSettings.exposure = .automatic(
+            exposureBias: automaticExposureBias
+        )
+    }
+
+    func useManualExposure() {
+        cameraSettings.exposure = .manual(
+            iso: manualExposureISO,
+            durationInSeconds: manualExposureDurationInSeconds
+        )
+    }
+
+    func setExposureBias(_ exposureBias: Float) {
+        automaticExposureBias = exposureBias
+        cameraSettings.exposure = .automatic(exposureBias: exposureBias)
+    }
+
+    func setManualExposureISO(_ iso: Float) {
+        manualExposureISO = iso
+        cameraSettings.exposure = .manual(
+            iso: iso,
+            durationInSeconds: manualExposureDurationInSeconds
+        )
+    }
+
+    func setManualExposureDuration(_ durationInSeconds: Double) {
+        manualExposureDurationInSeconds = durationInSeconds
+        cameraSettings.exposure = .manual(
+            iso: manualExposureISO,
+            durationInSeconds: durationInSeconds
+        )
     }
 
     private func applyCameraSettings() {
@@ -128,6 +170,50 @@ class CameraViewModel {
                 try await cameraSession.apply(settings)
             } catch {
                 print("Couldn't apply camera settings: \(error.localizedDescription)")
+            }
+        }
+    }
+
+    private func updateExposureCapabilities() async {
+        guard let capabilities = await cameraSession.exposureCapabilities() else {
+            return
+        }
+
+        exposureBiasRange = Double(capabilities.exposureBiasRange.lowerBound)...Double(capabilities.exposureBiasRange.upperBound)
+        exposureISORange = Double(capabilities.isoRange.lowerBound)...Double(capabilities.isoRange.upperBound)
+        exposureDurationRange = capabilities.durationRange
+
+        manualExposureISO = capabilities.currentISO
+        manualExposureDurationInSeconds = capabilities.currentDurationInSeconds
+
+        switch cameraSettings.exposure {
+        case let .automatic(exposureBias):
+            let supportedBias = min(
+                max(exposureBias, capabilities.exposureBiasRange.lowerBound),
+                capabilities.exposureBiasRange.upperBound
+            )
+            automaticExposureBias = supportedBias
+
+            if supportedBias != exposureBias {
+                cameraSettings.exposure = .automatic(exposureBias: supportedBias)
+            }
+        case let .manual(iso, durationInSeconds):
+            let supportedISO = min(
+                max(iso, capabilities.isoRange.lowerBound),
+                capabilities.isoRange.upperBound
+            )
+            let supportedDuration = min(
+                max(durationInSeconds, capabilities.durationRange.lowerBound),
+                capabilities.durationRange.upperBound
+            )
+            manualExposureISO = supportedISO
+            manualExposureDurationInSeconds = supportedDuration
+
+            if supportedISO != iso || supportedDuration != durationInSeconds {
+                cameraSettings.exposure = .manual(
+                    iso: supportedISO,
+                    durationInSeconds: supportedDuration
+                )
             }
         }
     }

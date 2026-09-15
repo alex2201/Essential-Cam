@@ -7,9 +7,7 @@ import SwiftUI
 
 struct QuickAccessControlsView: View {
     let viewModel: CameraViewModel
-    let isExposureDialPresented: Bool
-    let toggleExposureDial: () -> Void
-    let dismissActiveDial: () -> Void
+    let showExposureEditor: () -> Void
 
     var body: some View {
         Group {
@@ -36,7 +34,6 @@ struct QuickAccessControlsView: View {
             Menu {
                 ForEach(CameraAspectRatio.allCases, id: \.self) { ratio in
                     Button {
-                        dismissActiveDial()
                         viewModel.cameraSettings.aspectRatio = ratio
                     } label: {
                         settingLabel(
@@ -58,16 +55,13 @@ struct QuickAccessControlsView: View {
 
             separator
 
-            Button(action: toggleExposureDial) {
+            Button(action: showExposureEditor) {
                 VStack(spacing: 4) {
-                    Text("EV")
+                    Text("EXP")
                         .font(.system(size: 12, weight: .semibold))
                     Text(viewModel.cameraSettings.exposure.displayName)
                         .font(.system(size: 10))
                 }
-                .foregroundStyle(
-                    isExposureDialPresented ? Color.yellow : Color.gray
-                )
                 .frame(maxWidth: .infinity)
                 .contentShape(Rectangle())
             }
@@ -76,7 +70,6 @@ struct QuickAccessControlsView: View {
 
             Menu {
                 Button {
-                    dismissActiveDial()
                     viewModel.cameraSettings.focus = .auto
                 } label: {
                     settingLabel(
@@ -86,7 +79,6 @@ struct QuickAccessControlsView: View {
                 }
 
                 Button {
-                    dismissActiveDial()
                     viewModel.cameraSettings.focus = .continuousAuto
                 } label: {
                     settingLabel(
@@ -96,7 +88,6 @@ struct QuickAccessControlsView: View {
                 }
 
                 Button {
-                    dismissActiveDial()
                     viewModel.cameraSettings.focus = .locked
                 } label: {
                     settingLabel(
@@ -108,7 +99,6 @@ struct QuickAccessControlsView: View {
                 Menu("Manual") {
                     ForEach(FocusSetting.manualLensPositionOptions, id: \.self) { lensPosition in
                         Button {
-                            dismissActiveDial()
                             viewModel.cameraSettings.focus = .manual(
                                 lensPosition: lensPosition
                             )
@@ -163,14 +153,12 @@ struct QuickAccessControlsView: View {
     private var whiteBalanceMenu: some View {
         Menu("White balance") {
             Button {
-                dismissActiveDial()
                 viewModel.cameraSettings.whiteBalance = .auto
             } label: {
                 settingLabel("Auto", isSelected: viewModel.cameraSettings.whiteBalance == .auto)
             }
 
             Button {
-                dismissActiveDial()
                 viewModel.cameraSettings.whiteBalance = .continuousAuto
             } label: {
                 settingLabel(
@@ -180,7 +168,6 @@ struct QuickAccessControlsView: View {
             }
 
             Button {
-                dismissActiveDial()
                 viewModel.cameraSettings.whiteBalance = .locked
             } label: {
                 settingLabel("Locked", isSelected: viewModel.cameraSettings.whiteBalance == .locked)
@@ -191,21 +178,18 @@ struct QuickAccessControlsView: View {
     private var flashMenu: some View {
         Menu("Flash") {
             Button {
-                dismissActiveDial()
                 viewModel.cameraSettings.flashMode = .off
             } label: {
                 settingLabel("Off", isSelected: viewModel.cameraSettings.flashMode == .off)
             }
 
             Button {
-                dismissActiveDial()
                 viewModel.cameraSettings.flashMode = .automatic
             } label: {
                 settingLabel("Auto", isSelected: viewModel.cameraSettings.flashMode == .automatic)
             }
 
             Button {
-                dismissActiveDial()
                 viewModel.cameraSettings.flashMode = .on
             } label: {
                 settingLabel("On", isSelected: viewModel.cameraSettings.flashMode == .on)

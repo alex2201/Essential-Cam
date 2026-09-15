@@ -23,11 +23,7 @@ enum CaptureWhiteBalanceConfiguration {
 extension ExposureSetting {
     var avFoundationConfiguration: CaptureExposureConfiguration {
         switch self {
-        case .locked:
-            .mode(.locked, exposureBias: nil)
-        case let .auto(exposureBias):
-            .mode(.autoExpose, exposureBias: exposureBias)
-        case let .continuousAuto(exposureBias):
+        case let .automatic(exposureBias):
             .mode(.continuousAutoExposure, exposureBias: exposureBias)
         case let .manual(iso, durationInSeconds):
             .manual(

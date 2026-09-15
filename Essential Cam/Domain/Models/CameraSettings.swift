@@ -17,7 +17,7 @@ struct CameraSettings: Codable, Equatable, Sendable {
 
 extension CameraSettings {
     static let standard = CameraSettings(
-        exposure: .continuousAuto(exposureBias: 0),
+        exposure: .automatic(exposureBias: 0),
         focus: .continuousAuto,
         whiteBalance: .continuousAuto,
         zoomFactor: 1,
@@ -28,9 +28,7 @@ extension CameraSettings {
 }
 
 enum ExposureSetting: Codable, Equatable, Sendable {
-    case locked
-    case auto(exposureBias: Float)
-    case continuousAuto(exposureBias: Float)
+    case automatic(exposureBias: Float)
     case manual(iso: Float, durationInSeconds: Double)
 }
 

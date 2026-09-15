@@ -8,6 +8,14 @@
 @preconcurrency import AVFoundation
 import Foundation
 
+struct CameraExposureCapabilities: Sendable {
+    let exposureBiasRange: ClosedRange<Float>
+    let isoRange: ClosedRange<Float>
+    let durationRange: ClosedRange<Double>
+    let currentISO: Float
+    let currentDurationInSeconds: Double
+}
+
 actor CameraSession {
     nonisolated let captureSession: AVCaptureSession
 
@@ -56,6 +64,18 @@ actor CameraSession {
         selectedCameraDevices.compactMap {
             $0.toDomainModel(displayZoomFactor: deviceLookup.displayZoomFactor(for: $0))
         }
+    }
+
+    func exposureCapabilities() -> CameraExposureCapabilities? {
+        guard let device = activeVideoInput?.device else { return nil }
+
+        return CameraExposureCapabilities(
+            exposureBiasRange: device.minExposureTargetBias...device.maxExposureTargetBias,
+            isoRange: device.activeFormat.minISO...device.activeFormat.maxISO,
+            durationRange: device.activeFormat.minExposureDuration.seconds...device.activeFormat.maxExposureDuration.seconds,
+            currentISO: device.iso,
+            currentDurationInSeconds: device.exposureDuration.seconds
+        )
     }
 
     func apply(_ settings: CameraSettings) throws(CameraSessionError) {
