@@ -34,10 +34,6 @@ extension CameraAspectRatio {
 }
 
 extension ExposureSetting {
-    static let exposureBiasOptions: [Float] = [
-        -2, -1.5, -1, -0.5, 0, 0.5, 1, 1.5, 2
-    ]
-
     var displayName: String {
         switch self {
         case .locked:
@@ -46,6 +42,15 @@ extension ExposureSetting {
             exposureBias.exposureBiasDisplayName
         case .manual:
             "MAN"
+        }
+    }
+
+    var exposureBias: Float? {
+        switch self {
+        case let .auto(exposureBias), let .continuousAuto(exposureBias):
+            exposureBias
+        case .locked, .manual:
+            nil
         }
     }
 
@@ -60,14 +65,6 @@ extension ExposureSetting {
         }
     }
 
-    func hasExposureBias(_ exposureBias: Float) -> Bool {
-        switch self {
-        case let .auto(currentBias), let .continuousAuto(currentBias):
-            currentBias == exposureBias
-        case .locked, .manual:
-            false
-        }
-    }
 }
 
 extension FocusSetting {

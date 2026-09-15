@@ -30,6 +30,10 @@ class CameraViewModel {
     }
 
     private let cameraSession: CameraSession
+    private let settingsClock = ContinuousClock()
+    private let settingsApplicationInterval: Duration = .milliseconds(100)
+    private var settingsApplicationTask: Task<Void, Never>?
+    private var lastSettingsApplication: ContinuousClock.Instant?
 
     init(
         cameraSession: CameraSession = .init()
@@ -42,7 +46,7 @@ class CameraViewModel {
             try await cameraSession.start()
             cameraStatus = .running
             availableCameras = await cameraSession.availableCameras()
-            applyCameraSettings()
+            applyCameraSettingsImmediately()
         } catch {
             switch error {
             case .unauthorized:
@@ -89,6 +93,34 @@ class CameraViewModel {
     }
 
     private func applyCameraSettings() {
+        settingsApplicationTask?.cancel()
+
+        let now = settingsClock.now
+
+        guard let lastSettingsApplication else {
+            applyCameraSettingsImmediately()
+            return
+        }
+
+        let elapsed = lastSettingsApplication.duration(to: now)
+
+        guard elapsed < settingsApplicationInterval else {
+            applyCameraSettingsImmediately()
+            return
+        }
+
+        let delay = settingsApplicationInterval - elapsed
+        settingsApplicationTask = Task { [weak self] in
+            try? await Task.sleep(for: delay)
+            guard !Task.isCancelled else { return }
+            self?.applyCameraSettingsImmediately()
+        }
+    }
+
+    private func applyCameraSettingsImmediately() {
+        settingsApplicationTask = nil
+        lastSettingsApplication = settingsClock.now
+
         let settings = cameraSettings
 
         Task {
