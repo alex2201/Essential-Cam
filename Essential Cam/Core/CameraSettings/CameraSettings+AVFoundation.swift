@@ -2,6 +2,8 @@
 //  CameraSettings+AVFoundation.swift
 //  Essential Cam
 //
+//  Created by Alexander López on 17/09/26.
+//
 
 import AVFoundation
 
