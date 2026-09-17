@@ -77,6 +77,17 @@ extension FocusSetting {
     }
 }
 
+extension WhiteBalanceSetting {
+    var displayName: String {
+        switch self {
+        case .manual:
+            "MAN"
+        case .auto, .continuousAuto, .locked:
+            "AUTO"
+        }
+    }
+}
+
 extension Float {
     var exposureBiasDisplayName: String {
         let absoluteValue = String(format: "%.1f", abs(self))

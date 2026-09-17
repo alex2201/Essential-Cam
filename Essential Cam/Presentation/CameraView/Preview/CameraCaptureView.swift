@@ -10,6 +10,7 @@ struct CameraCaptureView: View {
 
     @State private var isExposureDialPresented = false
     @State private var isFocusDialPresented = false
+    @State private var isWhiteBalanceDialPresented = false
 
     var body: some View {
         GeometryReader { geometry in
@@ -43,11 +44,15 @@ struct CameraCaptureView: View {
                         } else if isFocusDialPresented {
                             focusEditor
                                 .transition(controlTransition)
+                        } else if isWhiteBalanceDialPresented {
+                            whiteBalanceEditor
+                                .transition(controlTransition)
                         } else {
                             QuickAccessControlsView(
                                 viewModel: viewModel,
                                 showExposureEditor: showExposureEditor,
-                                showFocusEditor: showFocusEditor
+                                showFocusEditor: showFocusEditor,
+                                showWhiteBalanceEditor: showWhiteBalanceEditor
                             )
                             .transition(controlTransition)
                         }
@@ -59,6 +64,10 @@ struct CameraCaptureView: View {
                     .animation(
                         .easeInOut(duration: 0.25),
                         value: isFocusDialPresented
+                    )
+                    .animation(
+                        .easeInOut(duration: 0.25),
+                        value: isWhiteBalanceDialPresented
                     )
                 }
 
@@ -160,6 +169,65 @@ struct CameraCaptureView: View {
         .padding(.trailing, 8)
     }
 
+    private var whiteBalanceEditor: some View {
+        VStack(spacing: 12) {
+            VStack(spacing: 4) {
+                whiteBalanceModeMenu
+
+                if whiteBalanceMode == .manual {
+                    editorSeparator
+
+                    HStack(spacing: 8) {
+                        CameraValueDial(
+                            value: manualWhiteBalanceTemperature,
+                            range: viewModel.whiteBalanceTemperatureRange,
+                            step: 100,
+                            title: "TEMP",
+                            orientation: .vertical,
+                            valueFormatter: formatWhiteBalanceTemperature,
+                            showsBackground: false
+                        )
+                        .frame(width: 50, height: 280)
+
+                        CameraValueDial(
+                            value: manualWhiteBalanceTint,
+                            range: viewModel.whiteBalanceTintRange,
+                            step: 1,
+                            title: "TINT",
+                            orientation: .vertical,
+                            neutralValue: 0,
+                            valueFormatter: formatWhiteBalanceTint,
+                            showsBackground: false
+                        )
+                        .frame(width: 50, height: 280)
+                    }
+                    .transition(.opacity)
+                }
+            }
+            .frame(width: whiteBalanceMode == .manual ? 108 : 50)
+            .background {
+                RoundedRectangle(cornerRadius: 16)
+                    .fill(.black.opacity(0.55))
+            }
+            .animation(.easeInOut(duration: 0.25), value: whiteBalanceMode)
+
+            Button(action: dismissWhiteBalanceEditor) {
+                Image(systemName: "xmark")
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(.white)
+                    .frame(width: 36, height: 36)
+                    .background {
+                        Circle()
+                            .fill(.black.opacity(0.55))
+                    }
+                    .contentShape(Circle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Close white balance control")
+        }
+        .padding(.trailing, 8)
+    }
+
     private var focusModeMenu: some View {
         Menu {
             Button(action: viewModel.useAutomaticFocus) {
@@ -216,6 +284,39 @@ struct CameraCaptureView: View {
             .padding(.top, 4)
         }
         .accessibilityLabel("Exposure mode")
+    }
+
+    private var whiteBalanceModeMenu: some View {
+        Menu {
+            Button(action: viewModel.useAutomaticWhiteBalance) {
+                settingLabel(
+                    "Automatic",
+                    isSelected: whiteBalanceMode == .automatic
+                )
+            }
+            .disabled(!viewModel.supportsAutomaticWhiteBalance)
+
+            Button(action: viewModel.useManualWhiteBalance) {
+                settingLabel(
+                    "Manual",
+                    isSelected: whiteBalanceMode == .manual
+                )
+            }
+            .disabled(!viewModel.supportsManualWhiteBalance)
+        } label: {
+            HStack(spacing: 2) {
+                Text(whiteBalanceMode.displayName)
+                Image(systemName: "chevron.up.chevron.down")
+                    .font(.system(size: 8, weight: .semibold))
+            }
+            .font(.system(size: 11, weight: .semibold, design: .rounded))
+            .foregroundStyle(.white)
+            .frame(maxWidth: .infinity, minHeight: 34)
+            .contentShape(Rectangle())
+            .padding(.horizontal, 4)
+            .padding(.top, 4)
+        }
+        .accessibilityLabel("White balance mode")
     }
 
     private var automaticExposureDial: some View {
@@ -349,6 +450,39 @@ struct CameraCaptureView: View {
         }
     }
 
+    private var manualWhiteBalanceTemperature: Binding<Double> {
+        Binding(
+            get: {
+                guard case let .manual(temperature, _) = viewModel.cameraSettings.whiteBalance else {
+                    return 5_500
+                }
+                return Double(temperature)
+            },
+            set: { viewModel.setManualWhiteBalanceTemperature(Float($0)) }
+        )
+    }
+
+    private var manualWhiteBalanceTint: Binding<Double> {
+        Binding(
+            get: {
+                guard case let .manual(_, tint) = viewModel.cameraSettings.whiteBalance else {
+                    return 0
+                }
+                return Double(tint)
+            },
+            set: { viewModel.setManualWhiteBalanceTint(Float($0)) }
+        )
+    }
+
+    private var whiteBalanceMode: WhiteBalanceEditorMode {
+        switch viewModel.cameraSettings.whiteBalance {
+        case .manual:
+            .manual
+        case .auto, .continuousAuto, .locked:
+            .automatic
+        }
+    }
+
     private func formatISO(_ stops: Double) -> String {
         String(Int(pow(2, stops).rounded()))
     }
@@ -376,6 +510,15 @@ struct CameraCaptureView: View {
         }
     }
 
+    private func formatWhiteBalanceTemperature(_ temperature: Double) -> String {
+        "\(Int(temperature.rounded()))K"
+    }
+
+    private func formatWhiteBalanceTint(_ tint: Double) -> String {
+        let value = Int(tint.rounded())
+        return value > 0 ? "+\(value)" : "\(value)"
+    }
+
     private func settingLabel(_ title: String, isSelected: Bool) -> some View {
         Group {
             if isSelected {
@@ -389,6 +532,7 @@ struct CameraCaptureView: View {
     private func showExposureEditor() {
         withAnimation(.easeInOut(duration: 0.25)) {
             isFocusDialPresented = false
+            isWhiteBalanceDialPresented = false
             isExposureDialPresented = true
         }
     }
@@ -402,6 +546,7 @@ struct CameraCaptureView: View {
     private func showFocusEditor() {
         withAnimation(.easeInOut(duration: 0.25)) {
             isExposureDialPresented = false
+            isWhiteBalanceDialPresented = false
             isFocusDialPresented = true
         }
     }
@@ -409,6 +554,21 @@ struct CameraCaptureView: View {
     private func dismissFocusEditor() {
         withAnimation(.easeInOut(duration: 0.25)) {
             isFocusDialPresented = false
+        }
+    }
+
+
+    private func showWhiteBalanceEditor() {
+        withAnimation(.easeInOut(duration: 0.25)) {
+            isExposureDialPresented = false
+            isFocusDialPresented = false
+            isWhiteBalanceDialPresented = true
+        }
+    }
+
+    private func dismissWhiteBalanceEditor() {
+        withAnimation(.easeInOut(duration: 0.25)) {
+            isWhiteBalanceDialPresented = false
         }
     }
 }
@@ -428,6 +588,20 @@ private enum ExposureEditorMode: Equatable {
 }
 
 private enum FocusEditorMode: Equatable {
+    case automatic
+    case manual
+
+    var displayName: String {
+        switch self {
+        case .automatic:
+            "AUTO"
+        case .manual:
+            "MAN"
+        }
+    }
+}
+
+private enum WhiteBalanceEditorMode: Equatable {
     case automatic
     case manual
 

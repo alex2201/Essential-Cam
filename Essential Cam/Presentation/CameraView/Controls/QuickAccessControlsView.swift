@@ -9,6 +9,7 @@ struct QuickAccessControlsView: View {
     let viewModel: CameraViewModel
     let showExposureEditor: () -> Void
     let showFocusEditor: () -> Void
+    let showWhiteBalanceEditor: () -> Void
 
     var body: some View {
         Group {
@@ -87,8 +88,21 @@ struct QuickAccessControlsView: View {
 
             separator
 
+            Button(action: showWhiteBalanceEditor) {
+                VStack(spacing: 4) {
+                    Text("WB")
+                        .font(.system(size: 12, weight: .semibold))
+                    Text(viewModel.cameraSettings.whiteBalance.displayName)
+                        .font(.system(size: 10))
+                        .foregroundStyle(.white.opacity(0.78))
+                }
+                .frame(maxWidth: .infinity)
+                .contentShape(Rectangle())
+            }
+
+            separator
+
             Menu {
-                whiteBalanceMenu
                 flashMenu
             } label: {
                 Image(systemName: "ellipsis")
@@ -112,31 +126,6 @@ struct QuickAccessControlsView: View {
             .fill(.white.opacity(0.35))
             .frame(height: 1)
             .padding(.horizontal, 8)
-    }
-
-    private var whiteBalanceMenu: some View {
-        Menu("White balance") {
-            Button {
-                viewModel.cameraSettings.whiteBalance = .auto
-            } label: {
-                settingLabel("Auto", isSelected: viewModel.cameraSettings.whiteBalance == .auto)
-            }
-
-            Button {
-                viewModel.cameraSettings.whiteBalance = .continuousAuto
-            } label: {
-                settingLabel(
-                    "Continuous auto",
-                    isSelected: viewModel.cameraSettings.whiteBalance == .continuousAuto
-                )
-            }
-
-            Button {
-                viewModel.cameraSettings.whiteBalance = .locked
-            } label: {
-                settingLabel("Locked", isSelected: viewModel.cameraSettings.whiteBalance == .locked)
-            }
-        }
     }
 
     private var flashMenu: some View {

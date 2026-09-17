@@ -23,6 +23,13 @@ struct CameraFocusCapabilities: Sendable {
     let currentLensPosition: Float
 }
 
+struct CameraWhiteBalanceCapabilities: Sendable {
+    let supportsContinuousAutoWhiteBalance: Bool
+    let supportsLockedWhiteBalance: Bool
+    let currentTemperature: Float
+    let currentTint: Float
+}
+
 actor CameraSession {
     nonisolated let captureSession: AVCaptureSession
 
@@ -93,6 +100,23 @@ actor CameraSession {
             supportsContinuousAutoFocus: device.isFocusModeSupported(.continuousAutoFocus),
             supportsManualFocus: device.isLockingFocusWithCustomLensPositionSupported,
             currentLensPosition: device.lensPosition
+        )
+    }
+
+    func whiteBalanceCapabilities() -> CameraWhiteBalanceCapabilities? {
+        guard let device = activeVideoInput?.device else { return nil }
+
+        let currentValues = device.temperatureAndTintValues(
+            for: device.deviceWhiteBalanceGains
+        )
+
+        return CameraWhiteBalanceCapabilities(
+            supportsContinuousAutoWhiteBalance: device.isWhiteBalanceModeSupported(
+                .continuousAutoWhiteBalance
+            ),
+            supportsLockedWhiteBalance: device.isWhiteBalanceModeSupported(.locked),
+            currentTemperature: currentValues.temperature,
+            currentTint: currentValues.tint
         )
     }
 

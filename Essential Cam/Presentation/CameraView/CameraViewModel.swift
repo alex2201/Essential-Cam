@@ -30,6 +30,14 @@ class CameraViewModel {
     private(set) var supportsAutoFocus = false
     private(set) var supportsContinuousAutoFocus = false
     private(set) var supportsManualFocus = false
+    private(set) var supportsAutomaticWhiteBalance = false
+    private(set) var supportsManualWhiteBalance = false
+
+    // AVFoundation exposes a maximum RGB gain, but no temperature or tint ranges.
+    // These bounds cover the useful photographic range; CameraSession clamps the
+    // converted gains to the limits reported by the active device.
+    let whiteBalanceTemperatureRange: ClosedRange<Double> = 2_000...10_000
+    let whiteBalanceTintRange: ClosedRange<Double> = -150...150
 
     var captureSession: AVCaptureSession {
         cameraSession.captureSession
@@ -44,6 +52,8 @@ class CameraViewModel {
     private var manualExposureISO: Float = 1
     private var manualExposureDurationInSeconds: Double = 1
     private var manualFocusLensPosition: Float = 0.5
+    private var manualWhiteBalanceTemperature: Float = 5_500
+    private var manualWhiteBalanceTint: Float = 0
 
     init(
         cameraSession: CameraSession = .init()
@@ -57,6 +67,7 @@ class CameraViewModel {
             availableCameras = await cameraSession.availableCameras()
             await updateExposureCapabilities()
             await updateFocusCapabilities()
+            await updateWhiteBalanceCapabilities()
             cameraStatus = .running
             applyCameraSettingsImmediately()
         } catch {
@@ -99,6 +110,7 @@ class CameraViewModel {
                 try await cameraSession.selectCamera(id: camera.id)
                 await updateExposureCapabilities()
                 await updateFocusCapabilities()
+                await updateWhiteBalanceCapabilities()
                 try await cameraSession.apply(cameraSettings)
             } catch {
                 print("Couldn't select camera: \(error.localizedDescription)")
@@ -162,6 +174,47 @@ class CameraViewModel {
         let supportedPosition = min(max(lensPosition, 0), 1)
         manualFocusLensPosition = supportedPosition
         cameraSettings.focus = .manual(lensPosition: supportedPosition)
+    }
+
+    func useAutomaticWhiteBalance() {
+        guard supportsAutomaticWhiteBalance else { return }
+        cameraSettings.whiteBalance = .continuousAuto
+    }
+
+    func useManualWhiteBalance() {
+        guard supportsManualWhiteBalance else { return }
+
+        Task {
+            if let capabilities = await cameraSession.whiteBalanceCapabilities() {
+                manualWhiteBalanceTemperature = supportedWhiteBalanceTemperature(
+                    capabilities.currentTemperature
+                )
+                manualWhiteBalanceTint = supportedWhiteBalanceTint(capabilities.currentTint)
+            }
+
+            cameraSettings.whiteBalance = .manual(
+                temperature: manualWhiteBalanceTemperature,
+                tint: manualWhiteBalanceTint
+            )
+        }
+    }
+
+    func setManualWhiteBalanceTemperature(_ temperature: Float) {
+        guard supportsManualWhiteBalance else { return }
+        manualWhiteBalanceTemperature = supportedWhiteBalanceTemperature(temperature)
+        cameraSettings.whiteBalance = .manual(
+            temperature: manualWhiteBalanceTemperature,
+            tint: manualWhiteBalanceTint
+        )
+    }
+
+    func setManualWhiteBalanceTint(_ tint: Float) {
+        guard supportsManualWhiteBalance else { return }
+        manualWhiteBalanceTint = supportedWhiteBalanceTint(tint)
+        cameraSettings.whiteBalance = .manual(
+            temperature: manualWhiteBalanceTemperature,
+            tint: manualWhiteBalanceTint
+        )
     }
 
     private func applyCameraSettings() {
@@ -273,5 +326,57 @@ class CameraViewModel {
         default:
             break
         }
+    }
+
+    private func updateWhiteBalanceCapabilities() async {
+        guard let capabilities = await cameraSession.whiteBalanceCapabilities() else {
+            supportsAutomaticWhiteBalance = false
+            supportsManualWhiteBalance = false
+            return
+        }
+
+        supportsAutomaticWhiteBalance = capabilities.supportsContinuousAutoWhiteBalance
+        supportsManualWhiteBalance = capabilities.supportsLockedWhiteBalance
+        manualWhiteBalanceTemperature = supportedWhiteBalanceTemperature(
+            capabilities.currentTemperature
+        )
+        manualWhiteBalanceTint = supportedWhiteBalanceTint(capabilities.currentTint)
+
+        switch cameraSettings.whiteBalance {
+        case .manual where !supportsManualWhiteBalance:
+            useAutomaticWhiteBalance()
+        case .auto, .locked:
+            useAutomaticWhiteBalance()
+        case .continuousAuto where !supportsAutomaticWhiteBalance:
+            break
+        case let .manual(temperature, tint):
+            let supportedTemperature = supportedWhiteBalanceTemperature(temperature)
+            let supportedTint = supportedWhiteBalanceTint(tint)
+            manualWhiteBalanceTemperature = supportedTemperature
+            manualWhiteBalanceTint = supportedTint
+
+            if supportedTemperature != temperature || supportedTint != tint {
+                cameraSettings.whiteBalance = .manual(
+                    temperature: supportedTemperature,
+                    tint: supportedTint
+                )
+            }
+        default:
+            break
+        }
+    }
+
+    private func supportedWhiteBalanceTemperature(_ temperature: Float) -> Float {
+        min(
+            max(temperature, Float(whiteBalanceTemperatureRange.lowerBound)),
+            Float(whiteBalanceTemperatureRange.upperBound)
+        )
+    }
+
+    private func supportedWhiteBalanceTint(_ tint: Float) -> Float {
+        min(
+            max(tint, Float(whiteBalanceTintRange.lowerBound)),
+            Float(whiteBalanceTintRange.upperBound)
+        )
     }
 }
