@@ -63,8 +63,6 @@ extension ExposureSetting {
 }
 
 extension FocusSetting {
-    static let manualLensPositionOptions: [Float] = [0, 0.25, 0.5, 0.75, 1]
-
     var displayName: String {
         switch self {
         case .locked:
@@ -72,18 +70,10 @@ extension FocusSetting {
         case .auto:
             "AUTO"
         case .continuousAuto:
-            "CONT"
+            "AUTO"
         case let .manual(lensPosition):
             lensPosition.lensPositionDisplayName
         }
-    }
-
-    func hasLensPosition(_ lensPosition: Float) -> Bool {
-        guard case let .manual(currentLensPosition) = self else {
-            return false
-        }
-
-        return currentLensPosition == lensPosition
     }
 }
 

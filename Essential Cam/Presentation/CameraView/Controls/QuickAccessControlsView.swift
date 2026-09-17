@@ -8,20 +8,23 @@ import SwiftUI
 struct QuickAccessControlsView: View {
     let viewModel: CameraViewModel
     let showExposureEditor: () -> Void
+    let showFocusEditor: () -> Void
 
     var body: some View {
         Group {
             if #available(iOS 26.0, *) {
                 controls
                     .glassEffect(
-                        .regular,
+                        .regular
+                            .tint(.black.opacity(0.35))
+                            .interactive(),
                         in: .rect(cornerRadius: 12)
                     )
             } else {
                 controls
                     .background {
                         RoundedRectangle(cornerRadius: 12)
-                            .fill(Color.black.opacity(0.4))
+                            .fill(Color.black.opacity(0.55))
                     }
             }
         }
@@ -48,6 +51,7 @@ struct QuickAccessControlsView: View {
                         .font(.system(size: 12, weight: .semibold))
                     Text(viewModel.cameraSettings.aspectRatio.displayName)
                         .font(.system(size: 10))
+                        .foregroundStyle(.white.opacity(0.78))
                 }
                 .frame(maxWidth: .infinity)
                 .contentShape(Rectangle())
@@ -61,6 +65,7 @@ struct QuickAccessControlsView: View {
                         .font(.system(size: 12, weight: .semibold))
                     Text(viewModel.cameraSettings.exposure.displayName)
                         .font(.system(size: 10))
+                        .foregroundStyle(.white.opacity(0.78))
                 }
                 .frame(maxWidth: .infinity)
                 .contentShape(Rectangle())
@@ -68,55 +73,13 @@ struct QuickAccessControlsView: View {
 
             separator
 
-            Menu {
-                Button {
-                    viewModel.cameraSettings.focus = .auto
-                } label: {
-                    settingLabel(
-                        "Auto",
-                        isSelected: viewModel.cameraSettings.focus == .auto
-                    )
-                }
-
-                Button {
-                    viewModel.cameraSettings.focus = .continuousAuto
-                } label: {
-                    settingLabel(
-                        "Continuous auto",
-                        isSelected: viewModel.cameraSettings.focus == .continuousAuto
-                    )
-                }
-
-                Button {
-                    viewModel.cameraSettings.focus = .locked
-                } label: {
-                    settingLabel(
-                        "Locked",
-                        isSelected: viewModel.cameraSettings.focus == .locked
-                    )
-                }
-
-                Menu("Manual") {
-                    ForEach(FocusSetting.manualLensPositionOptions, id: \.self) { lensPosition in
-                        Button {
-                            viewModel.cameraSettings.focus = .manual(
-                                lensPosition: lensPosition
-                            )
-                        } label: {
-                            settingLabel(
-                                lensPosition.lensPositionDisplayName,
-                                isSelected: viewModel.cameraSettings.focus
-                                    .hasLensPosition(lensPosition)
-                            )
-                        }
-                    }
-                }
-            } label: {
+            Button(action: showFocusEditor) {
                 VStack(spacing: 4) {
                     Text("AF")
                         .font(.system(size: 12, weight: .semibold))
                     Text(viewModel.cameraSettings.focus.displayName)
                         .font(.system(size: 10))
+                        .foregroundStyle(.white.opacity(0.78))
                 }
                 .frame(maxWidth: .infinity)
                 .contentShape(Rectangle())
@@ -130,6 +93,7 @@ struct QuickAccessControlsView: View {
             } label: {
                 Image(systemName: "ellipsis")
                     .font(.system(size: 16, weight: .semibold))
+                    .foregroundStyle(.white.opacity(0.85))
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, 4)
                     .contentShape(Rectangle())
@@ -139,13 +103,13 @@ struct QuickAccessControlsView: View {
             .contentShape(Rectangle())
         }
         .font(.caption)
-        .foregroundStyle(Color.gray)
+        .foregroundStyle(.white)
         .padding(.vertical, 12)
     }
 
     private var separator: some View {
         Rectangle()
-            .fill(.white.opacity(0.7))
+            .fill(.white.opacity(0.35))
             .frame(height: 1)
             .padding(.horizontal, 8)
     }

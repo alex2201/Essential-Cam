@@ -9,6 +9,7 @@ struct CameraCaptureView: View {
     let viewModel: CameraViewModel
 
     @State private var isExposureDialPresented = false
+    @State private var isFocusDialPresented = false
 
     var body: some View {
         GeometryReader { geometry in
@@ -39,10 +40,14 @@ struct CameraCaptureView: View {
                         if isExposureDialPresented {
                             exposureEditor
                                 .transition(controlTransition)
+                        } else if isFocusDialPresented {
+                            focusEditor
+                                .transition(controlTransition)
                         } else {
                             QuickAccessControlsView(
                                 viewModel: viewModel,
-                                showExposureEditor: showExposureEditor
+                                showExposureEditor: showExposureEditor,
+                                showFocusEditor: showFocusEditor
                             )
                             .transition(controlTransition)
                         }
@@ -50,6 +55,10 @@ struct CameraCaptureView: View {
                     .animation(
                         .easeInOut(duration: 0.25),
                         value: isExposureDialPresented
+                    )
+                    .animation(
+                        .easeInOut(duration: 0.25),
+                        value: isFocusDialPresented
                     )
                 }
 
@@ -69,6 +78,8 @@ struct CameraCaptureView: View {
         VStack(spacing: 12) {
             VStack(spacing: 4) {
                 exposureModeMenu
+
+                editorSeparator
 
                 Group {
                     switch exposureMode {
@@ -102,6 +113,78 @@ struct CameraCaptureView: View {
             .accessibilityLabel("Close exposure control")
         }
         .padding(.trailing, 8)
+    }
+
+    private var focusEditor: some View {
+        VStack(spacing: 12) {
+            VStack(spacing: 4) {
+                focusModeMenu
+
+                if focusMode == .manual {
+                    editorSeparator
+
+                    CameraValueDial(
+                        value: manualFocusPosition,
+                        range: 0...1,
+                        step: 0.01,
+                        title: "FOCUS",
+                        orientation: .vertical,
+                        valueFormatter: formatFocusPosition,
+                        showsBackground: false
+                    )
+                    .frame(width: 50, height: 280)
+                    .transition(.opacity)
+                }
+            }
+            .frame(width: 50)
+            .background {
+                RoundedRectangle(cornerRadius: 16)
+                    .fill(.black.opacity(0.55))
+            }
+            .animation(.easeInOut(duration: 0.25), value: focusMode)
+
+            Button(action: dismissFocusEditor) {
+                Image(systemName: "xmark")
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(.white)
+                    .frame(width: 36, height: 36)
+                    .background {
+                        Circle()
+                            .fill(.black.opacity(0.55))
+                    }
+                    .contentShape(Circle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Close focus control")
+        }
+        .padding(.trailing, 8)
+    }
+
+    private var focusModeMenu: some View {
+        Menu {
+            Button(action: viewModel.useAutomaticFocus) {
+                settingLabel("Automatic", isSelected: focusMode == .automatic)
+            }
+            .disabled(!viewModel.supportsAutomaticFocus)
+
+            Button(action: viewModel.useManualFocus) {
+                settingLabel("Manual", isSelected: focusMode == .manual)
+            }
+            .disabled(!viewModel.supportsManualFocus)
+        } label: {
+            HStack(spacing: 2) {
+                Text(focusMode.displayName)
+                Image(systemName: "chevron.up.chevron.down")
+                    .font(.system(size: 8, weight: .semibold))
+            }
+            .font(.system(size: 11, weight: .semibold, design: .rounded))
+            .foregroundStyle(.white)
+            .frame(maxWidth: .infinity, minHeight: 34)
+            .contentShape(Rectangle())
+            .padding(.horizontal, 4)
+            .padding(.top, 4)
+        }
+        .accessibilityLabel("Focus mode")
     }
 
     private var exposureModeMenu: some View {
@@ -178,6 +261,13 @@ struct CameraCaptureView: View {
         .move(edge: .trailing).combined(with: .opacity)
     }
 
+    private var editorSeparator: some View {
+        Rectangle()
+            .fill(.white.opacity(0.7))
+            .frame(height: 1)
+            .padding(.horizontal, 8)
+    }
+
     private var exposureBias: Binding<Double> {
         Binding(
             get: {
@@ -238,6 +328,27 @@ struct CameraCaptureView: View {
         }
     }
 
+    private var manualFocusPosition: Binding<Double> {
+        Binding(
+            get: {
+                guard case let .manual(lensPosition) = viewModel.cameraSettings.focus else {
+                    return 0.5
+                }
+                return Double(lensPosition)
+            },
+            set: { viewModel.setManualFocusLensPosition(Float($0)) }
+        )
+    }
+
+    private var focusMode: FocusEditorMode {
+        switch viewModel.cameraSettings.focus {
+        case .manual:
+            .manual
+        case .auto, .continuousAuto, .locked:
+            .automatic
+        }
+    }
+
     private func formatISO(_ stops: Double) -> String {
         String(Int(pow(2, stops).rounded()))
     }
@@ -254,6 +365,17 @@ struct CameraCaptureView: View {
         return "1/\(Int((1 / duration).rounded()))"
     }
 
+    private func formatFocusPosition(_ position: Double) -> String {
+        switch position {
+        case 0:
+            "NEAR"
+        case 1:
+            "FAR"
+        default:
+            "\(Int((position * 100).rounded()))%"
+        }
+    }
+
     private func settingLabel(_ title: String, isSelected: Bool) -> some View {
         Group {
             if isSelected {
@@ -266,6 +388,7 @@ struct CameraCaptureView: View {
 
     private func showExposureEditor() {
         withAnimation(.easeInOut(duration: 0.25)) {
+            isFocusDialPresented = false
             isExposureDialPresented = true
         }
     }
@@ -275,9 +398,36 @@ struct CameraCaptureView: View {
             isExposureDialPresented = false
         }
     }
+
+    private func showFocusEditor() {
+        withAnimation(.easeInOut(duration: 0.25)) {
+            isExposureDialPresented = false
+            isFocusDialPresented = true
+        }
+    }
+
+    private func dismissFocusEditor() {
+        withAnimation(.easeInOut(duration: 0.25)) {
+            isFocusDialPresented = false
+        }
+    }
 }
 
 private enum ExposureEditorMode: Equatable {
+    case automatic
+    case manual
+
+    var displayName: String {
+        switch self {
+        case .automatic:
+            "AUTO"
+        case .manual:
+            "MAN"
+        }
+    }
+}
+
+private enum FocusEditorMode: Equatable {
     case automatic
     case manual
 

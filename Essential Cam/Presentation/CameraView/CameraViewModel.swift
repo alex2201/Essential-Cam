@@ -27,6 +27,9 @@ class CameraViewModel {
     private(set) var exposureBiasRange: ClosedRange<Double> = 0...0
     private(set) var exposureISORange: ClosedRange<Double> = 1...1
     private(set) var exposureDurationRange: ClosedRange<Double> = 1...1
+    private(set) var supportsAutoFocus = false
+    private(set) var supportsContinuousAutoFocus = false
+    private(set) var supportsManualFocus = false
 
     var captureSession: AVCaptureSession {
         cameraSession.captureSession
@@ -40,6 +43,7 @@ class CameraViewModel {
     private var automaticExposureBias: Float = 0
     private var manualExposureISO: Float = 1
     private var manualExposureDurationInSeconds: Double = 1
+    private var manualFocusLensPosition: Float = 0.5
 
     init(
         cameraSession: CameraSession = .init()
@@ -52,6 +56,7 @@ class CameraViewModel {
             try await cameraSession.start()
             availableCameras = await cameraSession.availableCameras()
             await updateExposureCapabilities()
+            await updateFocusCapabilities()
             cameraStatus = .running
             applyCameraSettingsImmediately()
         } catch {
@@ -93,6 +98,7 @@ class CameraViewModel {
             do {
                 try await cameraSession.selectCamera(id: camera.id)
                 await updateExposureCapabilities()
+                await updateFocusCapabilities()
                 try await cameraSession.apply(cameraSettings)
             } catch {
                 print("Couldn't select camera: \(error.localizedDescription)")
@@ -132,6 +138,30 @@ class CameraViewModel {
             iso: manualExposureISO,
             durationInSeconds: durationInSeconds
         )
+    }
+
+    var supportsAutomaticFocus: Bool {
+        supportsContinuousAutoFocus || supportsAutoFocus
+    }
+
+    func useAutomaticFocus() {
+        if supportsContinuousAutoFocus {
+            cameraSettings.focus = .continuousAuto
+        } else if supportsAutoFocus {
+            cameraSettings.focus = .auto
+        }
+    }
+
+    func useManualFocus() {
+        guard supportsManualFocus else { return }
+        cameraSettings.focus = .manual(lensPosition: manualFocusLensPosition)
+    }
+
+    func setManualFocusLensPosition(_ lensPosition: Float) {
+        guard supportsManualFocus else { return }
+        let supportedPosition = min(max(lensPosition, 0), 1)
+        manualFocusLensPosition = supportedPosition
+        cameraSettings.focus = .manual(lensPosition: supportedPosition)
     }
 
     private func applyCameraSettings() {
@@ -215,6 +245,33 @@ class CameraViewModel {
                     durationInSeconds: supportedDuration
                 )
             }
+        }
+    }
+
+    private func updateFocusCapabilities() async {
+        guard let capabilities = await cameraSession.focusCapabilities() else {
+            supportsAutoFocus = false
+            supportsContinuousAutoFocus = false
+            supportsManualFocus = false
+            return
+        }
+
+        supportsAutoFocus = capabilities.supportsAutoFocus
+        supportsContinuousAutoFocus = capabilities.supportsContinuousAutoFocus
+        supportsManualFocus = capabilities.supportsManualFocus
+        manualFocusLensPosition = capabilities.currentLensPosition
+
+        switch cameraSettings.focus {
+        case .manual where !supportsManualFocus:
+            useAutomaticFocus()
+        case .auto where !supportsAutoFocus:
+            useAutomaticFocus()
+        case .continuousAuto where !supportsContinuousAutoFocus:
+            useAutomaticFocus()
+        case .locked:
+            useAutomaticFocus()
+        default:
+            break
         }
     }
 }

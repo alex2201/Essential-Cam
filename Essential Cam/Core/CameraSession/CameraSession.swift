@@ -16,6 +16,13 @@ struct CameraExposureCapabilities: Sendable {
     let currentDurationInSeconds: Double
 }
 
+struct CameraFocusCapabilities: Sendable {
+    let supportsAutoFocus: Bool
+    let supportsContinuousAutoFocus: Bool
+    let supportsManualFocus: Bool
+    let currentLensPosition: Float
+}
+
 actor CameraSession {
     nonisolated let captureSession: AVCaptureSession
 
@@ -75,6 +82,17 @@ actor CameraSession {
             durationRange: device.activeFormat.minExposureDuration.seconds...device.activeFormat.maxExposureDuration.seconds,
             currentISO: device.iso,
             currentDurationInSeconds: device.exposureDuration.seconds
+        )
+    }
+
+    func focusCapabilities() -> CameraFocusCapabilities? {
+        guard let device = activeVideoInput?.device else { return nil }
+
+        return CameraFocusCapabilities(
+            supportsAutoFocus: device.isFocusModeSupported(.autoFocus),
+            supportsContinuousAutoFocus: device.isFocusModeSupported(.continuousAutoFocus),
+            supportsManualFocus: device.isLockingFocusWithCustomLensPositionSupported,
+            currentLensPosition: device.lensPosition
         )
     }
 
@@ -237,7 +255,9 @@ actor CameraSession {
             guard device.isFocusModeSupported(mode) else { return }
             device.focusMode = mode
         case let .manual(lensPosition):
-            guard device.isFocusModeSupported(.locked) else { return }
+            guard device.isLockingFocusWithCustomLensPositionSupported else {
+                return
+            }
             device.setFocusModeLocked(
                 lensPosition: min(max(lensPosition, 0), 1)
             )
