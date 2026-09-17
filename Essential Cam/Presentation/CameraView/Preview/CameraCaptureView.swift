@@ -25,7 +25,7 @@ struct CameraCaptureView: View {
 
                     CameraPreview(session: viewModel.captureSession)
                         .aspectRatio(
-                            viewModel.cameraSettings.aspectRatio.previewWidthToHeight,
+                            viewModel.controls.settings.aspectRatio.previewWidthToHeight,
                             contentMode: .fit
                         )
                         .clipped()
@@ -49,7 +49,7 @@ struct CameraCaptureView: View {
                                 .transition(controlTransition)
                         } else {
                             QuickAccessControlsView(
-                                viewModel: viewModel,
+                                controls: viewModel.controls,
                                 showExposureEditor: showExposureEditor,
                                 showFocusEditor: showFocusEditor,
                                 showWhiteBalanceEditor: showWhiteBalanceEditor
@@ -180,7 +180,7 @@ struct CameraCaptureView: View {
                     HStack(spacing: 8) {
                         CameraValueDial(
                             value: manualWhiteBalanceTemperature,
-                            range: viewModel.whiteBalanceTemperatureRange,
+                            range: viewModel.controls.whiteBalanceTemperatureRange,
                             step: 100,
                             title: "TEMP",
                             orientation: .vertical,
@@ -191,7 +191,7 @@ struct CameraCaptureView: View {
 
                         CameraValueDial(
                             value: manualWhiteBalanceTint,
-                            range: viewModel.whiteBalanceTintRange,
+                            range: viewModel.controls.whiteBalanceTintRange,
                             step: 1,
                             title: "TINT",
                             orientation: .vertical,
@@ -230,15 +230,15 @@ struct CameraCaptureView: View {
 
     private var focusModeMenu: some View {
         Menu {
-            Button(action: viewModel.useAutomaticFocus) {
+            Button(action: viewModel.controls.useAutomaticFocus) {
                 settingLabel("Automatic", isSelected: focusMode == .automatic)
             }
-            .disabled(!viewModel.supportsAutomaticFocus)
+            .disabled(!viewModel.controls.supportsAutomaticFocus)
 
-            Button(action: viewModel.useManualFocus) {
+            Button(action: viewModel.controls.useManualFocus) {
                 settingLabel("Manual", isSelected: focusMode == .manual)
             }
-            .disabled(!viewModel.supportsManualFocus)
+            .disabled(!viewModel.controls.supportsManualFocus)
         } label: {
             HStack(spacing: 2) {
                 Text(focusMode.displayName)
@@ -257,14 +257,14 @@ struct CameraCaptureView: View {
 
     private var exposureModeMenu: some View {
         Menu {
-            Button(action: viewModel.useAutomaticExposure) {
+            Button(action: viewModel.controls.useAutomaticExposure) {
                 settingLabel(
                     "Automatic",
                     isSelected: exposureMode == .automatic
                 )
             }
 
-            Button(action: viewModel.useManualExposure) {
+            Button(action: viewModel.controls.useManualExposure) {
                 settingLabel(
                     "Manual",
                     isSelected: exposureMode == .manual
@@ -288,21 +288,21 @@ struct CameraCaptureView: View {
 
     private var whiteBalanceModeMenu: some View {
         Menu {
-            Button(action: viewModel.useAutomaticWhiteBalance) {
+            Button(action: viewModel.controls.useAutomaticWhiteBalance) {
                 settingLabel(
                     "Automatic",
                     isSelected: whiteBalanceMode == .automatic
                 )
             }
-            .disabled(!viewModel.supportsAutomaticWhiteBalance)
+            .disabled(!viewModel.controls.supportsAutomaticWhiteBalance)
 
-            Button(action: viewModel.useManualWhiteBalance) {
+            Button(action: viewModel.controls.useManualWhiteBalance) {
                 settingLabel(
                     "Manual",
                     isSelected: whiteBalanceMode == .manual
                 )
             }
-            .disabled(!viewModel.supportsManualWhiteBalance)
+            .disabled(!viewModel.controls.supportsManualWhiteBalance)
         } label: {
             HStack(spacing: 2) {
                 Text(whiteBalanceMode.displayName)
@@ -322,7 +322,7 @@ struct CameraCaptureView: View {
     private var automaticExposureDial: some View {
         CameraValueDial(
             value: exposureBias,
-            range: viewModel.exposureBiasRange,
+            range: viewModel.controls.exposureBiasRange,
             step: 0.1,
             title: "EV",
             orientation: .vertical,
@@ -372,10 +372,10 @@ struct CameraCaptureView: View {
     private var exposureBias: Binding<Double> {
         Binding(
             get: {
-                Double(viewModel.cameraSettings.exposure.exposureBias ?? 0)
+                Double(viewModel.controls.settings.exposure.exposureBias ?? 0)
             },
             set: { newValue in
-                viewModel.setExposureBias(Float(newValue))
+                viewModel.controls.setExposureBias(Float(newValue))
             }
         )
     }
@@ -383,13 +383,13 @@ struct CameraCaptureView: View {
     private var manualISOStops: Binding<Double> {
         Binding(
             get: {
-                guard case let .manual(iso, _) = viewModel.cameraSettings.exposure else {
+                guard case let .manual(iso, _) = viewModel.controls.settings.exposure else {
                     return isoStopsRange.lowerBound
                 }
                 return log2(Double(iso))
             },
             set: { stops in
-                viewModel.setManualExposureISO(Float(pow(2, stops)))
+                viewModel.controls.setManualExposureISO(Float(pow(2, stops)))
             }
         )
     }
@@ -397,31 +397,31 @@ struct CameraCaptureView: View {
     private var manualDurationStops: Binding<Double> {
         Binding(
             get: {
-                guard case let .manual(_, duration) = viewModel.cameraSettings.exposure else {
+                guard case let .manual(_, duration) = viewModel.controls.settings.exposure else {
                     return durationStopsRange.lowerBound
                 }
                 return log2(duration)
             },
             set: { stops in
-                viewModel.setManualExposureDuration(pow(2, stops))
+                viewModel.controls.setManualExposureDuration(pow(2, stops))
             }
         )
     }
 
     private var isoStopsRange: ClosedRange<Double> {
-        let lowerBound = log2(viewModel.exposureISORange.lowerBound)
-        let upperBound = log2(viewModel.exposureISORange.upperBound)
+        let lowerBound = log2(viewModel.controls.exposureISORange.lowerBound)
+        let upperBound = log2(viewModel.controls.exposureISORange.upperBound)
         return lowerBound...upperBound
     }
 
     private var durationStopsRange: ClosedRange<Double> {
-        let lowerBound = log2(viewModel.exposureDurationRange.lowerBound)
-        let upperBound = log2(viewModel.exposureDurationRange.upperBound)
+        let lowerBound = log2(viewModel.controls.exposureDurationRange.lowerBound)
+        let upperBound = log2(viewModel.controls.exposureDurationRange.upperBound)
         return lowerBound...upperBound
     }
 
     private var exposureMode: ExposureEditorMode {
-        switch viewModel.cameraSettings.exposure {
+        switch viewModel.controls.settings.exposure {
         case .automatic:
             .automatic
         case .manual:
@@ -432,17 +432,17 @@ struct CameraCaptureView: View {
     private var manualFocusPosition: Binding<Double> {
         Binding(
             get: {
-                guard case let .manual(lensPosition) = viewModel.cameraSettings.focus else {
+                guard case let .manual(lensPosition) = viewModel.controls.settings.focus else {
                     return 0.5
                 }
                 return Double(lensPosition)
             },
-            set: { viewModel.setManualFocusLensPosition(Float($0)) }
+            set: { viewModel.controls.setManualFocusLensPosition(Float($0)) }
         )
     }
 
     private var focusMode: FocusEditorMode {
-        switch viewModel.cameraSettings.focus {
+        switch viewModel.controls.settings.focus {
         case .manual:
             .manual
         case .auto, .continuousAuto, .locked:
@@ -453,29 +453,29 @@ struct CameraCaptureView: View {
     private var manualWhiteBalanceTemperature: Binding<Double> {
         Binding(
             get: {
-                guard case let .manual(temperature, _) = viewModel.cameraSettings.whiteBalance else {
+                guard case let .manual(temperature, _) = viewModel.controls.settings.whiteBalance else {
                     return 5_500
                 }
                 return Double(temperature)
             },
-            set: { viewModel.setManualWhiteBalanceTemperature(Float($0)) }
+            set: { viewModel.controls.setManualWhiteBalanceTemperature(Float($0)) }
         )
     }
 
     private var manualWhiteBalanceTint: Binding<Double> {
         Binding(
             get: {
-                guard case let .manual(_, tint) = viewModel.cameraSettings.whiteBalance else {
+                guard case let .manual(_, tint) = viewModel.controls.settings.whiteBalance else {
                     return 0
                 }
                 return Double(tint)
             },
-            set: { viewModel.setManualWhiteBalanceTint(Float($0)) }
+            set: { viewModel.controls.setManualWhiteBalanceTint(Float($0)) }
         )
     }
 
     private var whiteBalanceMode: WhiteBalanceEditorMode {
-        switch viewModel.cameraSettings.whiteBalance {
+        switch viewModel.controls.settings.whiteBalance {
         case .manual:
             .manual
         case .auto, .continuousAuto, .locked:

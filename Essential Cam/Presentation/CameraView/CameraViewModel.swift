@@ -10,66 +10,45 @@ import Foundation
 
 @MainActor
 @Observable
-class CameraViewModel {
+final class CameraViewModel {
+    // MARK: - View State
 
     var cameraStatus = CameraStatus.unknown
     var isPerformingCaptureOperation = false
     var capturedPhotoPreview: CGImage?
     var isPhotoPreviewPresented = false
-    var cameraSettings = CameraSettings.standard {
-        didSet {
-            guard cameraSettings != oldValue else { return }
-            applyCameraSettings()
-        }
-    }
     private(set) var captureOrientation = CaptureOrientation.portrait
     private(set) var availableCameras: [Camera] = []
-    private(set) var exposureBiasRange: ClosedRange<Double> = 0...0
-    private(set) var exposureISORange: ClosedRange<Double> = 1...1
-    private(set) var exposureDurationRange: ClosedRange<Double> = 1...1
-    private(set) var supportsAutoFocus = false
-    private(set) var supportsContinuousAutoFocus = false
-    private(set) var supportsManualFocus = false
-    private(set) var supportsAutomaticWhiteBalance = false
-    private(set) var supportsManualWhiteBalance = false
 
-    // AVFoundation exposes a maximum RGB gain, but no temperature or tint ranges.
-    // These bounds cover the useful photographic range; CameraSession clamps the
-    // converted gains to the limits reported by the active device.
-    let whiteBalanceTemperatureRange: ClosedRange<Double> = 2_000...10_000
-    let whiteBalanceTintRange: ClosedRange<Double> = -150...150
+    // MARK: - Camera Controls
+
+    let controls: CameraControlsController
+
+    // MARK: - Preview
 
     var captureSession: AVCaptureSession {
         cameraSession.captureSession
     }
 
-    private let cameraSession: CameraSession
-    private let settingsClock = ContinuousClock()
-    private let settingsApplicationInterval: Duration = .milliseconds(100)
-    private var settingsApplicationTask: Task<Void, Never>?
-    private var lastSettingsApplication: ContinuousClock.Instant?
-    private var automaticExposureBias: Float = 0
-    private var manualExposureISO: Float = 1
-    private var manualExposureDurationInSeconds: Double = 1
-    private var manualFocusLensPosition: Float = 0.5
-    private var manualWhiteBalanceTemperature: Float = 5_500
-    private var manualWhiteBalanceTint: Float = 0
+    // MARK: - Dependencies
 
-    init(
-        cameraSession: CameraSession = .init()
-    ) {
+    private let cameraSession: CameraSession
+
+    // MARK: - Initialization
+
+    init(cameraSession: CameraSession = .init()) {
         self.cameraSession = cameraSession
+        controls = CameraControlsController(cameraSession: cameraSession)
     }
+
+    // MARK: - Lifecycle
 
     func start() async {
         do {
             try await cameraSession.start()
             availableCameras = await cameraSession.availableCameras()
-            await updateExposureCapabilities()
-            await updateFocusCapabilities()
-            await updateWhiteBalanceCapabilities()
+            await controls.synchronizeWithCamera()
             cameraStatus = .running
-            applyCameraSettingsImmediately()
         } catch {
             switch error {
             case .unauthorized:
@@ -81,6 +60,8 @@ class CameraViewModel {
             print("Couldn't start capture: \(error.localizedDescription)")
         }
     }
+
+    // MARK: - Photo Capture
 
     func captureAction() {
         guard !isPerformingCaptureOperation else { return }
@@ -104,279 +85,16 @@ class CameraViewModel {
         }
     }
 
+    // MARK: - Camera Selection
+
     func selectCamera(_ camera: Camera) {
         Task {
             do {
                 try await cameraSession.selectCamera(id: camera.id)
-                await updateExposureCapabilities()
-                await updateFocusCapabilities()
-                await updateWhiteBalanceCapabilities()
-                try await cameraSession.apply(cameraSettings)
+                await controls.synchronizeWithCamera()
             } catch {
                 print("Couldn't select camera: \(error.localizedDescription)")
             }
         }
-    }
-
-    func useAutomaticExposure() {
-        cameraSettings.exposure = .automatic(
-            exposureBias: automaticExposureBias
-        )
-    }
-
-    func useManualExposure() {
-        cameraSettings.exposure = .manual(
-            iso: manualExposureISO,
-            durationInSeconds: manualExposureDurationInSeconds
-        )
-    }
-
-    func setExposureBias(_ exposureBias: Float) {
-        automaticExposureBias = exposureBias
-        cameraSettings.exposure = .automatic(exposureBias: exposureBias)
-    }
-
-    func setManualExposureISO(_ iso: Float) {
-        manualExposureISO = iso
-        cameraSettings.exposure = .manual(
-            iso: iso,
-            durationInSeconds: manualExposureDurationInSeconds
-        )
-    }
-
-    func setManualExposureDuration(_ durationInSeconds: Double) {
-        manualExposureDurationInSeconds = durationInSeconds
-        cameraSettings.exposure = .manual(
-            iso: manualExposureISO,
-            durationInSeconds: durationInSeconds
-        )
-    }
-
-    var supportsAutomaticFocus: Bool {
-        supportsContinuousAutoFocus || supportsAutoFocus
-    }
-
-    func useAutomaticFocus() {
-        if supportsContinuousAutoFocus {
-            cameraSettings.focus = .continuousAuto
-        } else if supportsAutoFocus {
-            cameraSettings.focus = .auto
-        }
-    }
-
-    func useManualFocus() {
-        guard supportsManualFocus else { return }
-        cameraSettings.focus = .manual(lensPosition: manualFocusLensPosition)
-    }
-
-    func setManualFocusLensPosition(_ lensPosition: Float) {
-        guard supportsManualFocus else { return }
-        let supportedPosition = min(max(lensPosition, 0), 1)
-        manualFocusLensPosition = supportedPosition
-        cameraSettings.focus = .manual(lensPosition: supportedPosition)
-    }
-
-    func useAutomaticWhiteBalance() {
-        guard supportsAutomaticWhiteBalance else { return }
-        cameraSettings.whiteBalance = .continuousAuto
-    }
-
-    func useManualWhiteBalance() {
-        guard supportsManualWhiteBalance else { return }
-
-        Task {
-            if let capabilities = await cameraSession.whiteBalanceCapabilities() {
-                manualWhiteBalanceTemperature = supportedWhiteBalanceTemperature(
-                    capabilities.currentTemperature
-                )
-                manualWhiteBalanceTint = supportedWhiteBalanceTint(capabilities.currentTint)
-            }
-
-            cameraSettings.whiteBalance = .manual(
-                temperature: manualWhiteBalanceTemperature,
-                tint: manualWhiteBalanceTint
-            )
-        }
-    }
-
-    func setManualWhiteBalanceTemperature(_ temperature: Float) {
-        guard supportsManualWhiteBalance else { return }
-        manualWhiteBalanceTemperature = supportedWhiteBalanceTemperature(temperature)
-        cameraSettings.whiteBalance = .manual(
-            temperature: manualWhiteBalanceTemperature,
-            tint: manualWhiteBalanceTint
-        )
-    }
-
-    func setManualWhiteBalanceTint(_ tint: Float) {
-        guard supportsManualWhiteBalance else { return }
-        manualWhiteBalanceTint = supportedWhiteBalanceTint(tint)
-        cameraSettings.whiteBalance = .manual(
-            temperature: manualWhiteBalanceTemperature,
-            tint: manualWhiteBalanceTint
-        )
-    }
-
-    private func applyCameraSettings() {
-        settingsApplicationTask?.cancel()
-
-        let now = settingsClock.now
-
-        guard let lastSettingsApplication else {
-            applyCameraSettingsImmediately()
-            return
-        }
-
-        let elapsed = lastSettingsApplication.duration(to: now)
-
-        guard elapsed < settingsApplicationInterval else {
-            applyCameraSettingsImmediately()
-            return
-        }
-
-        let delay = settingsApplicationInterval - elapsed
-        settingsApplicationTask = Task { [weak self] in
-            try? await Task.sleep(for: delay)
-            guard !Task.isCancelled else { return }
-            self?.applyCameraSettingsImmediately()
-        }
-    }
-
-    private func applyCameraSettingsImmediately() {
-        settingsApplicationTask = nil
-        lastSettingsApplication = settingsClock.now
-
-        let settings = cameraSettings
-
-        Task {
-            do {
-                try await cameraSession.apply(settings)
-            } catch {
-                print("Couldn't apply camera settings: \(error.localizedDescription)")
-            }
-        }
-    }
-
-    private func updateExposureCapabilities() async {
-        guard let capabilities = await cameraSession.exposureCapabilities() else {
-            return
-        }
-
-        exposureBiasRange = Double(capabilities.exposureBiasRange.lowerBound)...Double(capabilities.exposureBiasRange.upperBound)
-        exposureISORange = Double(capabilities.isoRange.lowerBound)...Double(capabilities.isoRange.upperBound)
-        exposureDurationRange = capabilities.durationRange
-
-        manualExposureISO = capabilities.currentISO
-        manualExposureDurationInSeconds = capabilities.currentDurationInSeconds
-
-        switch cameraSettings.exposure {
-        case let .automatic(exposureBias):
-            let supportedBias = min(
-                max(exposureBias, capabilities.exposureBiasRange.lowerBound),
-                capabilities.exposureBiasRange.upperBound
-            )
-            automaticExposureBias = supportedBias
-
-            if supportedBias != exposureBias {
-                cameraSettings.exposure = .automatic(exposureBias: supportedBias)
-            }
-        case let .manual(iso, durationInSeconds):
-            let supportedISO = min(
-                max(iso, capabilities.isoRange.lowerBound),
-                capabilities.isoRange.upperBound
-            )
-            let supportedDuration = min(
-                max(durationInSeconds, capabilities.durationRange.lowerBound),
-                capabilities.durationRange.upperBound
-            )
-            manualExposureISO = supportedISO
-            manualExposureDurationInSeconds = supportedDuration
-
-            if supportedISO != iso || supportedDuration != durationInSeconds {
-                cameraSettings.exposure = .manual(
-                    iso: supportedISO,
-                    durationInSeconds: supportedDuration
-                )
-            }
-        }
-    }
-
-    private func updateFocusCapabilities() async {
-        guard let capabilities = await cameraSession.focusCapabilities() else {
-            supportsAutoFocus = false
-            supportsContinuousAutoFocus = false
-            supportsManualFocus = false
-            return
-        }
-
-        supportsAutoFocus = capabilities.supportsAutoFocus
-        supportsContinuousAutoFocus = capabilities.supportsContinuousAutoFocus
-        supportsManualFocus = capabilities.supportsManualFocus
-        manualFocusLensPosition = capabilities.currentLensPosition
-
-        switch cameraSettings.focus {
-        case .manual where !supportsManualFocus:
-            useAutomaticFocus()
-        case .auto where !supportsAutoFocus:
-            useAutomaticFocus()
-        case .continuousAuto where !supportsContinuousAutoFocus:
-            useAutomaticFocus()
-        case .locked:
-            useAutomaticFocus()
-        default:
-            break
-        }
-    }
-
-    private func updateWhiteBalanceCapabilities() async {
-        guard let capabilities = await cameraSession.whiteBalanceCapabilities() else {
-            supportsAutomaticWhiteBalance = false
-            supportsManualWhiteBalance = false
-            return
-        }
-
-        supportsAutomaticWhiteBalance = capabilities.supportsContinuousAutoWhiteBalance
-        supportsManualWhiteBalance = capabilities.supportsLockedWhiteBalance
-        manualWhiteBalanceTemperature = supportedWhiteBalanceTemperature(
-            capabilities.currentTemperature
-        )
-        manualWhiteBalanceTint = supportedWhiteBalanceTint(capabilities.currentTint)
-
-        switch cameraSettings.whiteBalance {
-        case .manual where !supportsManualWhiteBalance:
-            useAutomaticWhiteBalance()
-        case .auto, .locked:
-            useAutomaticWhiteBalance()
-        case .continuousAuto where !supportsAutomaticWhiteBalance:
-            break
-        case let .manual(temperature, tint):
-            let supportedTemperature = supportedWhiteBalanceTemperature(temperature)
-            let supportedTint = supportedWhiteBalanceTint(tint)
-            manualWhiteBalanceTemperature = supportedTemperature
-            manualWhiteBalanceTint = supportedTint
-
-            if supportedTemperature != temperature || supportedTint != tint {
-                cameraSettings.whiteBalance = .manual(
-                    temperature: supportedTemperature,
-                    tint: supportedTint
-                )
-            }
-        default:
-            break
-        }
-    }
-
-    private func supportedWhiteBalanceTemperature(_ temperature: Float) -> Float {
-        min(
-            max(temperature, Float(whiteBalanceTemperatureRange.lowerBound)),
-            Float(whiteBalanceTemperatureRange.upperBound)
-        )
-    }
-
-    private func supportedWhiteBalanceTint(_ tint: Float) -> Float {
-        min(
-            max(tint, Float(whiteBalanceTintRange.lowerBound)),
-            Float(whiteBalanceTintRange.upperBound)
-        )
     }
 }

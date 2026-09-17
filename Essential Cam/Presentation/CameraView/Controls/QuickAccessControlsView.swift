@@ -6,7 +6,7 @@
 import SwiftUI
 
 struct QuickAccessControlsView: View {
-    let viewModel: CameraViewModel
+    let controls: CameraControlsController
     let showExposureEditor: () -> Void
     let showFocusEditor: () -> Void
     let showWhiteBalanceEditor: () -> Void
@@ -14,7 +14,7 @@ struct QuickAccessControlsView: View {
     var body: some View {
         Group {
             if #available(iOS 26.0, *) {
-                controls
+                controlsContent
                     .glassEffect(
                         .regular
                             .tint(.black.opacity(0.35))
@@ -22,7 +22,7 @@ struct QuickAccessControlsView: View {
                         in: .rect(cornerRadius: 12)
                     )
             } else {
-                controls
+                controlsContent
                     .background {
                         RoundedRectangle(cornerRadius: 12)
                             .fill(Color.black.opacity(0.55))
@@ -33,16 +33,16 @@ struct QuickAccessControlsView: View {
         .padding(.horizontal, 8)
     }
 
-    private var controls: some View {
+    private var controlsContent: some View {
         VStack(spacing: 8) {
             Menu {
                 ForEach(CameraAspectRatio.allCases, id: \.self) { ratio in
                     Button {
-                        viewModel.cameraSettings.aspectRatio = ratio
+                        controls.setAspectRatio(ratio)
                     } label: {
                         settingLabel(
                             ratio.displayName,
-                            isSelected: ratio == viewModel.cameraSettings.aspectRatio
+                            isSelected: ratio == controls.settings.aspectRatio
                         )
                     }
                 }
@@ -50,7 +50,7 @@ struct QuickAccessControlsView: View {
                 VStack(spacing: 4) {
                     Text("FMT")
                         .font(.system(size: 12, weight: .semibold))
-                    Text(viewModel.cameraSettings.aspectRatio.displayName)
+                    Text(controls.settings.aspectRatio.displayName)
                         .font(.system(size: 10))
                         .foregroundStyle(.white.opacity(0.78))
                 }
@@ -64,7 +64,7 @@ struct QuickAccessControlsView: View {
                 VStack(spacing: 4) {
                     Text("EXP")
                         .font(.system(size: 12, weight: .semibold))
-                    Text(viewModel.cameraSettings.exposure.displayName)
+                    Text(controls.settings.exposure.displayName)
                         .font(.system(size: 10))
                         .foregroundStyle(.white.opacity(0.78))
                 }
@@ -78,7 +78,7 @@ struct QuickAccessControlsView: View {
                 VStack(spacing: 4) {
                     Text("AF")
                         .font(.system(size: 12, weight: .semibold))
-                    Text(viewModel.cameraSettings.focus.displayName)
+                    Text(controls.settings.focus.displayName)
                         .font(.system(size: 10))
                         .foregroundStyle(.white.opacity(0.78))
                 }
@@ -92,7 +92,7 @@ struct QuickAccessControlsView: View {
                 VStack(spacing: 4) {
                     Text("WB")
                         .font(.system(size: 12, weight: .semibold))
-                    Text(viewModel.cameraSettings.whiteBalance.displayName)
+                    Text(controls.settings.whiteBalance.displayName)
                         .font(.system(size: 10))
                         .foregroundStyle(.white.opacity(0.78))
                 }
@@ -131,21 +131,21 @@ struct QuickAccessControlsView: View {
     private var flashMenu: some View {
         Menu("Flash") {
             Button {
-                viewModel.cameraSettings.flashMode = .off
+                controls.setFlashMode(.off)
             } label: {
-                settingLabel("Off", isSelected: viewModel.cameraSettings.flashMode == .off)
+                settingLabel("Off", isSelected: controls.settings.flashMode == .off)
             }
 
             Button {
-                viewModel.cameraSettings.flashMode = .automatic
+                controls.setFlashMode(.automatic)
             } label: {
-                settingLabel("Auto", isSelected: viewModel.cameraSettings.flashMode == .automatic)
+                settingLabel("Auto", isSelected: controls.settings.flashMode == .automatic)
             }
 
             Button {
-                viewModel.cameraSettings.flashMode = .on
+                controls.setFlashMode(.on)
             } label: {
-                settingLabel("On", isSelected: viewModel.cameraSettings.flashMode == .on)
+                settingLabel("On", isSelected: controls.settings.flashMode == .on)
             }
         }
     }
