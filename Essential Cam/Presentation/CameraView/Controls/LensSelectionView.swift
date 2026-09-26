@@ -26,14 +26,52 @@ struct LensSelectorButton: View {
                     .foregroundStyle(.white.opacity(0.78))
             }
             .foregroundStyle(.white)
-            .frame(width: 45, height: 48)
+            .frame(maxWidth: .infinity)
+            .frame(height: 52)
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .cameraControlBackground(cornerRadius: 12)
-        .padding(8)
         .accessibilityLabel("Choose camera lens")
         .accessibilityValue(camera?.zoomFactorAccessibilityName ?? "1 times")
+    }
+}
+
+struct CameraSelectionControlsView: View {
+    let camera: Camera?
+    let canSwitchPosition: Bool
+    let isSwitchingPosition: Bool
+    let showLensSelector: () -> Void
+    let toggleCameraPosition: () -> Void
+
+    var body: some View {
+        VStack(spacing: 0) {
+            LensSelectorButton(
+                camera: camera,
+                action: showLensSelector
+            )
+
+            Rectangle()
+                .fill(.white.opacity(0.35))
+                .frame(height: 1)
+                .padding(.horizontal, 8)
+
+            Button(action: toggleCameraPosition) {
+                Image(systemName: "arrow.triangle.2.circlepath.camera")
+                    .font(.system(size: 17, weight: .semibold))
+                    .foregroundStyle(.white)
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 44)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .disabled(!canSwitchPosition || isSwitchingPosition)
+            .opacity(canSwitchPosition ? 1 : 0.45)
+            .accessibilityLabel("Switch between front and back camera")
+            .accessibilityValue(camera?.position.accessibilityName ?? "Unavailable")
+        }
+        .frame(width: 45)
+        .cameraControlBackground(cornerRadius: 12)
+        .padding(.horizontal, 8)
     }
 }
 
@@ -191,6 +229,17 @@ private extension Camera.Lens {
             "3×"
         case .unknown:
             "—"
+        }
+    }
+}
+
+private extension Camera.Position {
+    var accessibilityName: String {
+        switch self {
+        case .front:
+            "Front camera"
+        case .back:
+            "Back camera"
         }
     }
 }

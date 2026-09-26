@@ -79,9 +79,12 @@ struct CameraCaptureView: View {
                                     showWhiteBalanceEditor: showWhiteBalanceEditor
                                 )
 
-                                LensSelectorButton(
+                                CameraSelectionControlsView(
                                     camera: viewModel.selectedCamera,
-                                    action: showLensSelector
+                                    canSwitchPosition: viewModel.canSwitchCameraPosition,
+                                    isSwitchingPosition: viewModel.isSwitchingCameraPosition,
+                                    showLensSelector: showLensSelector,
+                                    toggleCameraPosition: toggleCameraPosition
                                 )
                             }
                             .transition(controlTransition)
@@ -627,6 +630,11 @@ struct CameraCaptureView: View {
     private func selectCamera(_ camera: Camera) {
         viewModel.selectCamera(camera)
         dismissLensSelector()
+    }
+
+    private func toggleCameraPosition() {
+        dismissLensSelector()
+        viewModel.toggleCameraPosition()
     }
 }
 

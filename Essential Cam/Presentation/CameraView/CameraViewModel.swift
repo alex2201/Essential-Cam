@@ -21,6 +21,8 @@ final class CameraViewModel {
     private(set) var availableCameras: [Camera] = []
     private(set) var availableVirtualCameras: [Camera] = []
     private(set) var selectedCamera: Camera?
+    private(set) var canSwitchCameraPosition = false
+    private(set) var isSwitchingCameraPosition = false
 
     var preferredVirtualCamera: Camera? {
         availableVirtualCameras.max {
@@ -57,6 +59,7 @@ final class CameraViewModel {
             availableCameras = await cameraSession.availableCameras()
             availableVirtualCameras = await cameraSession.availableVirtualCameras()
             selectedCamera = await cameraSession.selectedCamera()
+            canSwitchCameraPosition = await cameraSession.canSwitchCameraPosition()
             await controls.synchronizeWithCamera()
             cameraStatus = .running
         } catch {
@@ -108,6 +111,25 @@ final class CameraViewModel {
                 selectedCamera = camera
             } catch {
                 print("Couldn't select camera: \(error.localizedDescription)")
+            }
+        }
+    }
+
+    func toggleCameraPosition() {
+        guard canSwitchCameraPosition, !isSwitchingCameraPosition else { return }
+        isSwitchingCameraPosition = true
+
+        Task {
+            defer { isSwitchingCameraPosition = false }
+
+            do {
+                try await cameraSession.toggleCameraPosition()
+                availableCameras = await cameraSession.availableCameras()
+                availableVirtualCameras = await cameraSession.availableVirtualCameras()
+                selectedCamera = await cameraSession.selectedCamera()
+                await controls.synchronizeWithCamera(afterCameraSwitch: true)
+            } catch {
+                print("Couldn't switch camera position: \(error.localizedDescription)")
             }
         }
     }

@@ -93,6 +93,10 @@ actor CameraSession {
         )
     }
 
+    func canSwitchCameraPosition() -> Bool {
+        deviceLookup.mainFrontCamera != nil && deviceLookup.mainBackCamera != nil
+    }
+
     func exposureCapabilities() -> CameraExposureCapabilities? {
         guard let device = activeVideoInput?.device else { return nil }
 
@@ -183,36 +187,30 @@ actor CameraSession {
             throw .cameraNotFound
         }
 
-        guard activeVideoInput?.device.uniqueID != id else { return }
+        try replaceVideoInput(with: device)
+    }
 
-        let newInput: AVCaptureDeviceInput
-        do {
-            newInput = try AVCaptureDeviceInput(device: device)
-        } catch {
-            throw .addInputFailed
+    func toggleCameraPosition() throws(CameraSessionError) {
+        guard isSetUp else {
+            throw .setupFailed
         }
 
-        captureSession.beginConfiguration()
-        defer { captureSession.commitConfiguration() }
+        let newPosition: Camera.Position = selectedCameraPosition == .back ? .front : .back
+        let device: AVCaptureDevice?
 
-        let previousInput = activeVideoInput
-        if let previousInput {
-            captureSession.removeInput(previousInput)
+        switch newPosition {
+        case .front:
+            device = deviceLookup.mainFrontCamera
+        case .back:
+            device = deviceLookup.mainBackCamera
         }
 
-        guard captureSession.canAddInput(newInput) else {
-            if let previousInput, captureSession.canAddInput(previousInput) {
-                captureSession.addInput(previousInput)
-            }
-            throw .addInputFailed
+        guard let device else {
+            throw .cameraNotFound
         }
 
-        captureSession.addInput(newInput)
-        activeVideoInput = newInput
-
-        for capture in captureComponents {
-            capture.updateConfiguration(for: device)
-        }
+        try replaceVideoInput(with: device)
+        selectedCameraPosition = newPosition
     }
 
     private func setUp() throws(CameraSessionError) {
@@ -246,6 +244,41 @@ actor CameraSession {
             return deviceLookup.mainFrontCamera
         case .back:
             return deviceLookup.mainBackCamera
+        }
+    }
+
+    private func replaceVideoInput(
+        with device: AVCaptureDevice
+    ) throws(CameraSessionError) {
+        guard activeVideoInput?.device.uniqueID != device.uniqueID else { return }
+
+        let newInput: AVCaptureDeviceInput
+        do {
+            newInput = try AVCaptureDeviceInput(device: device)
+        } catch {
+            throw .addInputFailed
+        }
+
+        captureSession.beginConfiguration()
+        defer { captureSession.commitConfiguration() }
+
+        let previousInput = activeVideoInput
+        if let previousInput {
+            captureSession.removeInput(previousInput)
+        }
+
+        guard captureSession.canAddInput(newInput) else {
+            if let previousInput, captureSession.canAddInput(previousInput) {
+                captureSession.addInput(previousInput)
+            }
+            throw .addInputFailed
+        }
+
+        captureSession.addInput(newInput)
+        activeVideoInput = newInput
+
+        for capture in captureComponents {
+            capture.updateConfiguration(for: device)
         }
     }
 
