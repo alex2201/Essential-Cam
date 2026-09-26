@@ -29,6 +29,7 @@ final class CameraControlsController {
     private(set) var supportsManualFocus = false
     private(set) var supportsAutomaticWhiteBalance = false
     private(set) var supportsManualWhiteBalance = false
+    private(set) var zoomFactorRange: ClosedRange<Double> = 1...1
 
     let whiteBalanceTemperatureRange: ClosedRange<Double> = 2_000...10_000
     let whiteBalanceTintRange: ClosedRange<Double> = -150...150
@@ -41,6 +42,7 @@ final class CameraControlsController {
 
     private let cameraSession: CameraSession
     private let settingsThrottler: any Throttling<CameraSettings>
+    private let zoomThrottler: any Throttling<CameraSettings>
 
     // MARK: - Cached Values
 
@@ -56,7 +58,8 @@ final class CameraControlsController {
 
     init(
         cameraSession: CameraSession,
-        settingsThrottler: (any Throttling<CameraSettings>)? = nil
+        settingsThrottler: (any Throttling<CameraSettings>)? = nil,
+        zoomThrottler: (any Throttling<CameraSettings>)? = nil
     ) {
         self.cameraSession = cameraSession
         self.settingsThrottler = settingsThrottler
@@ -67,17 +70,30 @@ final class CameraControlsController {
                     print("Couldn't apply camera settings: \(error.localizedDescription)")
                 }
             }
+        self.zoomThrottler = zoomThrottler
+            ?? AsyncThrottler(interval: .milliseconds(16)) { settings in
+                do {
+                    try await cameraSession.applyZoom(settings)
+                } catch {
+                    print("Couldn't apply camera zoom: \(error.localizedDescription)")
+                }
+            }
     }
 
     // MARK: - Camera Synchronization
 
-    func synchronizeWithCamera(afterCameraSwitch: Bool = false) async {
+    func synchronizeWithCamera(
+        afterCameraSwitch: Bool = false,
+        preferredZoomFactor: Double? = nil
+    ) async {
         await updateExposureCapabilities()
         await updateFocusCapabilities()
         await updateWhiteBalanceCapabilities()
+        await updateZoomCapabilities(preferredZoomFactor: preferredZoomFactor)
 
         if afterCameraSwitch {
             settingsThrottler.cancel()
+            zoomThrottler.cancel()
             do {
                 try await cameraSession.applyAfterCameraSwitch(settings)
             } catch {
@@ -100,6 +116,20 @@ final class CameraControlsController {
         isDeviceApplicationSuppressed = true
         settings.flashMode = flashMode
         isDeviceApplicationSuppressed = false
+    }
+
+    // MARK: - Zoom
+
+    func setZoomFactor(_ zoomFactor: Double) {
+        let supportedZoomFactor = min(
+            max(zoomFactor, zoomFactorRange.lowerBound),
+            zoomFactorRange.upperBound
+        )
+
+        isDeviceApplicationSuppressed = true
+        settings.zoomFactor = supportedZoomFactor
+        isDeviceApplicationSuppressed = false
+        zoomThrottler.submit(settings)
     }
 
     // MARK: - Exposure
@@ -314,6 +344,22 @@ final class CameraControlsController {
         default:
             break
         }
+    }
+
+    private func updateZoomCapabilities(preferredZoomFactor: Double? = nil) async {
+        guard let capabilities = await cameraSession.zoomCapabilities() else {
+            zoomFactorRange = 1...1
+            return
+        }
+
+        zoomFactorRange = capabilities.range
+        let zoomFactor = preferredZoomFactor.map {
+            min(max($0, capabilities.range.lowerBound), capabilities.range.upperBound)
+        } ?? capabilities.currentZoomFactor
+
+        isDeviceApplicationSuppressed = true
+        settings.zoomFactor = zoomFactor
+        isDeviceApplicationSuppressed = false
     }
 
     // MARK: - White Balance Validation

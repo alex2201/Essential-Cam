@@ -107,7 +107,15 @@ final class CameraViewModel {
         Task {
             do {
                 try await cameraSession.selectCamera(id: camera.id)
-                await controls.synchronizeWithCamera(afterCameraSwitch: true)
+                let preferredZoomFactor: Double? = if case .virtual = camera.deviceKind {
+                    1
+                } else {
+                    nil
+                }
+                await controls.synchronizeWithCamera(
+                    afterCameraSwitch: true,
+                    preferredZoomFactor: preferredZoomFactor
+                )
                 selectedCamera = camera
             } catch {
                 print("Couldn't select camera: \(error.localizedDescription)")

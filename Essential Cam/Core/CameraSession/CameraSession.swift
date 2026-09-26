@@ -30,6 +30,11 @@ struct CameraWhiteBalanceCapabilities: Sendable {
     let currentTint: Float
 }
 
+struct CameraZoomCapabilities: Sendable {
+    let range: ClosedRange<Double>
+    let currentZoomFactor: Double
+}
+
 actor CameraSession {
     nonisolated let captureSession: AVCaptureSession
 
@@ -137,6 +142,18 @@ actor CameraSession {
         )
     }
 
+    func zoomCapabilities() -> CameraZoomCapabilities? {
+        guard let device = activeVideoInput?.device else { return nil }
+
+        let displayMultiplier = Double(displayZoomFactorMultiplier(for: device))
+
+        return CameraZoomCapabilities(
+            range: Double(device.minAvailableVideoZoomFactor) * displayMultiplier
+                ... Double(device.maxAvailableVideoZoomFactor) * displayMultiplier,
+            currentZoomFactor: Double(device.videoZoomFactor) * displayMultiplier
+        )
+    }
+
     func apply(_ settings: CameraSettings) throws(CameraSessionError) {
         guard isSetUp, let device = activeVideoInput?.device else {
             throw .setupFailed
@@ -153,6 +170,40 @@ actor CameraSession {
         apply(settings.exposure, to: device)
         apply(settings.focus, to: device)
         apply(settings.whiteBalance, to: device)
+        apply(settings.avFoundationZoomFactor, to: device)
+    }
+
+    func applyZoom(_ settings: CameraSettings) throws(CameraSessionError) {
+        guard isSetUp, let device = activeVideoInput?.device else {
+            throw .setupFailed
+        }
+
+        do {
+            try device.lockForConfiguration()
+        } catch {
+            throw .configurationFailed
+        }
+
+        defer { device.unlockForConfiguration() }
+
+        if case .automatic = settings.exposure {
+            apply(settings.exposure, to: device)
+        }
+
+        switch settings.focus {
+        case .auto, .continuousAuto:
+            apply(settings.focus, to: device)
+        case .locked, .manual:
+            break
+        }
+
+        switch settings.whiteBalance {
+        case .auto, .continuousAuto:
+            apply(settings.whiteBalance, to: device)
+        case .locked, .manual:
+            break
+        }
+
         apply(settings.avFoundationZoomFactor, to: device)
     }
 
@@ -443,20 +494,20 @@ actor CameraSession {
         _ zoomFactor: CGFloat,
         to device: AVCaptureDevice
     ) {
-        let deviceZoomFactor: CGFloat
-        if device.isVirtualDevice, device.displayVideoZoomFactorMultiplier > 0 {
-            // Virtual devices use an internal scale that starts at their widest
-            // constituent camera. Keep CameraSettings on the user-facing scale,
-            // where 1× matches the main wide-angle camera.
-            deviceZoomFactor = zoomFactor / device.displayVideoZoomFactorMultiplier
-        } else {
-            deviceZoomFactor = zoomFactor
-        }
+        let deviceZoomFactor = zoomFactor / displayZoomFactorMultiplier(for: device)
 
         device.videoZoomFactor = min(
             max(deviceZoomFactor, device.minAvailableVideoZoomFactor),
             device.maxAvailableVideoZoomFactor
         )
+    }
+
+    private func displayZoomFactorMultiplier(for device: AVCaptureDevice) -> CGFloat {
+        if device.isVirtualDevice, device.displayVideoZoomFactorMultiplier > 0 {
+            return device.displayVideoZoomFactorMultiplier
+        }
+
+        return CGFloat(deviceLookup.displayZoomFactor(for: device) ?? 1)
     }
 
     @discardableResult

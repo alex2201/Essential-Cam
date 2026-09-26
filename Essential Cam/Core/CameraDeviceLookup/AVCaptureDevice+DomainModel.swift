@@ -19,8 +19,20 @@ extension AVCaptureDevice {
             position: position,
             lens: domainLens,
             deviceKind: domainDeviceKind,
-            displayZoomFactor: displayZoomFactor
+            displayZoomFactor: displayZoomFactor,
+            nominalFocalLengthIn35mmFilm: domainNominalFocalLength
         )
+    }
+
+    private var domainNominalFocalLength: Double? {
+        guard !isVirtualDevice else { return nil }
+
+        if #available(iOS 26.0, *) {
+            let focalLength = Double(nominalFocalLengthIn35mmFilm)
+            return focalLength > 0 ? focalLength : nil
+        }
+
+        return nil
     }
 
     private var domainPosition: Camera.Position? {

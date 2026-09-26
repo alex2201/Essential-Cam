@@ -14,6 +14,8 @@ struct CameraCaptureView: View {
     @State private var isFocusDialPresented = false
     @State private var isWhiteBalanceDialPresented = false
     @State private var isLensSelectorPresented = false
+    @State private var isZoomSelectorPresented = false
+    @State private var zoomFactorAtGestureStart: Double?
 
     var body: some View {
         GeometryReader { geometry in
@@ -43,6 +45,8 @@ struct CameraCaptureView: View {
                             maxHeight: .infinity,
                             alignment: .center
                         )
+                        .contentShape(Rectangle())
+                        .gesture(zoomGesture)
                 }
                 .frame(width: geometry.size.width, height: previewContainerHeight)
                 .overlay(alignment: .topTrailing) {
@@ -70,6 +74,14 @@ struct CameraCaptureView: View {
                                 dismiss: dismissLensSelector
                             )
                             .transition(controlTransition)
+                        } else if isZoomSelectorPresented {
+                            ZoomSelectionView(
+                                zoomFactors: zoomSelectionFactors,
+                                selectedZoomFactor: viewModel.controls.settings.zoomFactor,
+                                selectZoomFactor: selectZoomFactor,
+                                dismiss: dismissZoomSelector
+                            )
+                            .transition(controlTransition)
                         } else {
                             VStack(spacing: 24) {
                                 QuickAccessControlsView(
@@ -81,9 +93,12 @@ struct CameraCaptureView: View {
 
                                 CameraSelectionControlsView(
                                     camera: viewModel.selectedCamera,
+                                    zoomFactor: viewModel.controls.settings.zoomFactor,
+                                    canSelectZoom: !zoomSelectionFactors.isEmpty,
                                     canSwitchPosition: viewModel.canSwitchCameraPosition,
                                     isSwitchingPosition: viewModel.isSwitchingCameraPosition,
                                     showLensSelector: showLensSelector,
+                                    showZoomSelector: showZoomSelector,
                                     toggleCameraPosition: toggleCameraPosition
                                 )
                             }
@@ -105,6 +120,10 @@ struct CameraCaptureView: View {
                     .animation(
                         .easeInOut(duration: 0.25),
                         value: isLensSelectorPresented
+                    )
+                    .animation(
+                        .easeInOut(duration: 0.25),
+                        value: isZoomSelectorPresented
                     )
                 }
 
@@ -399,6 +418,39 @@ struct CameraCaptureView: View {
         .move(edge: .trailing).combined(with: .opacity)
     }
 
+    private var zoomGesture: some Gesture {
+        MagnifyGesture()
+            .onChanged { value in
+                let startingZoomFactor = zoomFactorAtGestureStart
+                    ?? viewModel.controls.settings.zoomFactor
+                zoomFactorAtGestureStart = startingZoomFactor
+                viewModel.controls.setZoomFactor(
+                    startingZoomFactor * Double(value.magnification)
+                )
+            }
+            .onEnded { _ in
+                zoomFactorAtGestureStart = nil
+            }
+    }
+
+    private var zoomSelectionFactors: [Double] {
+        guard let selectedCamera = viewModel.selectedCamera else { return [] }
+
+        let baseZoomFactor: Double
+        switch selectedCamera.deviceKind {
+        case .physical:
+            baseZoomFactor = selectedCamera.displayZoomFactor
+                ?? viewModel.controls.zoomFactorRange.lowerBound
+        case .virtual:
+            baseZoomFactor = 1
+        }
+        let supportedRange = viewModel.controls.zoomFactorRange
+
+        return [1.0, 2.0, 4.0]
+            .map { baseZoomFactor * $0 }
+            .filter { supportedRange.contains($0) }
+    }
+
     private var editorSeparator: some View {
         Rectangle()
             .fill(.white.opacity(0.7))
@@ -571,6 +623,7 @@ struct CameraCaptureView: View {
             isFocusDialPresented = false
             isWhiteBalanceDialPresented = false
             isLensSelectorPresented = false
+            isZoomSelectorPresented = false
             isExposureDialPresented = true
         }
     }
@@ -586,6 +639,7 @@ struct CameraCaptureView: View {
             isExposureDialPresented = false
             isWhiteBalanceDialPresented = false
             isLensSelectorPresented = false
+            isZoomSelectorPresented = false
             isFocusDialPresented = true
         }
     }
@@ -602,6 +656,7 @@ struct CameraCaptureView: View {
             isExposureDialPresented = false
             isFocusDialPresented = false
             isLensSelectorPresented = false
+            isZoomSelectorPresented = false
             isWhiteBalanceDialPresented = true
         }
     }
@@ -617,6 +672,7 @@ struct CameraCaptureView: View {
             isExposureDialPresented = false
             isFocusDialPresented = false
             isWhiteBalanceDialPresented = false
+            isZoomSelectorPresented = false
             isLensSelectorPresented = true
         }
     }
@@ -627,13 +683,37 @@ struct CameraCaptureView: View {
         }
     }
 
+    private func showZoomSelector() {
+        guard !zoomSelectionFactors.isEmpty else { return }
+        withAnimation(.easeInOut(duration: 0.25)) {
+            isExposureDialPresented = false
+            isFocusDialPresented = false
+            isWhiteBalanceDialPresented = false
+            isLensSelectorPresented = false
+            isZoomSelectorPresented = true
+        }
+    }
+
+    private func dismissZoomSelector() {
+        withAnimation(.easeInOut(duration: 0.25)) {
+            isZoomSelectorPresented = false
+        }
+    }
+
+    private func selectZoomFactor(_ zoomFactor: Double) {
+        viewModel.controls.setZoomFactor(zoomFactor)
+        dismissZoomSelector()
+    }
+
     private func selectCamera(_ camera: Camera) {
+        dismissZoomSelector()
         viewModel.selectCamera(camera)
         dismissLensSelector()
     }
 
     private func toggleCameraPosition() {
         dismissLensSelector()
+        dismissZoomSelector()
         viewModel.toggleCameraPosition()
     }
 }

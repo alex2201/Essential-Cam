@@ -13,6 +13,8 @@ struct Camera: Identifiable, Sendable, Equatable {
     let deviceKind: DeviceKind
     /// Lens magnification relative to the main camera, independent of current zoom.
     let displayZoomFactor: Double?
+    /// Nominal 35 mm-equivalent focal length for a physical camera.
+    let nominalFocalLengthIn35mmFilm: Double?
 }
 
 extension Camera {
