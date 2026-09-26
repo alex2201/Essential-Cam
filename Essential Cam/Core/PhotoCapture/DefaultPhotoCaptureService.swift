@@ -17,11 +17,15 @@ final class DefaultPhotoCaptureService: PhotoCaptureService {
     private let photoOutput = AVCapturePhotoOutput()
     private var activeCaptureDelegate: PhotoCaptureDelegate?
 
-    func capturePhoto() async throws -> Photo {
+    func supportsFlashMode(_ flashMode: CameraFlashMode) -> Bool {
+        photoOutput.supportedFlashModes.contains(flashMode.avFoundationValue)
+    }
+
+    func capturePhoto(flashMode: CameraFlashMode) async throws -> Photo {
         defer { activeCaptureDelegate = nil }
 
         return try await withCheckedThrowingContinuation { continuation in
-            let photoSettings = createPhotoSettings()
+            let photoSettings = createPhotoSettings(flashMode: flashMode)
             let delegate = PhotoCaptureDelegate(continuation: continuation)
 
             activeCaptureDelegate = delegate
@@ -29,7 +33,7 @@ final class DefaultPhotoCaptureService: PhotoCaptureService {
         }
     }
 
-    private func createPhotoSettings() -> AVCapturePhotoSettings {
+    private func createPhotoSettings(flashMode: CameraFlashMode) -> AVCapturePhotoSettings {
         // Create a new settings object to configure the photo capture.
         var photoSettings = AVCapturePhotoSettings()
 
@@ -45,6 +49,7 @@ final class DefaultPhotoCaptureService: PhotoCaptureService {
         }
 
         photoSettings.maxPhotoDimensions = photoOutput.maxPhotoDimensions
+        photoSettings.flashMode = flashMode.avFoundationValue
 
         return photoSettings
     }

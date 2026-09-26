@@ -6,7 +6,7 @@
 //
 
 protocol PhotoCapturing: Sendable {
-    func capturePhoto() async throws -> Photo
+    func capturePhoto(flashMode: CameraFlashMode) async throws -> Photo
 }
 
 protocol PhotoSaving: Sendable {
@@ -18,8 +18,8 @@ struct PhotoCaptureUseCase {
     let photoSaving: any PhotoSaving
 
     // Returns proxy photo to show quick preview to the user
-    func execute() async throws -> Photo {
-        let photo = try await photoCapture.capturePhoto()
+    func execute(flashMode: CameraFlashMode) async throws -> Photo {
+        let photo = try await photoCapture.capturePhoto(flashMode: flashMode)
         try await photoSaving.save(photo)
 
         return photo

@@ -76,7 +76,9 @@ final class CameraViewModel {
             )
 
             do {
-                let photo = try await useCase.execute()
+                let photo = try await useCase.execute(
+                    flashMode: controls.settings.flashMode
+                )
                 capturedPhotoPreview = photo.previewImage
                 isPhotoPreviewPresented = photo.previewImage != nil
             } catch {

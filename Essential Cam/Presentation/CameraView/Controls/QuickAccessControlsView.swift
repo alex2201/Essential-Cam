@@ -101,22 +101,6 @@ struct QuickAccessControlsView: View {
                 .frame(maxWidth: .infinity)
                 .contentShape(Rectangle())
             }
-
-            separator
-
-            Menu {
-                flashMenu
-            } label: {
-                Image(systemName: "ellipsis")
-                    .font(.system(size: 16, weight: .semibold))
-                    .foregroundStyle(.white.opacity(0.85))
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 4)
-                    .contentShape(Rectangle())
-            }
-            .accessibilityLabel("More camera settings")
-            .frame(maxWidth: .infinity)
-            .contentShape(Rectangle())
         }
         .font(.caption)
         .foregroundStyle(.white)
@@ -128,28 +112,6 @@ struct QuickAccessControlsView: View {
             .fill(.white.opacity(0.35))
             .frame(height: 1)
             .padding(.horizontal, 8)
-    }
-
-    private var flashMenu: some View {
-        Menu("Flash") {
-            Button {
-                controls.setFlashMode(.off)
-            } label: {
-                settingLabel("Off", isSelected: controls.settings.flashMode == .off)
-            }
-
-            Button {
-                controls.setFlashMode(.automatic)
-            } label: {
-                settingLabel("Auto", isSelected: controls.settings.flashMode == .automatic)
-            }
-
-            Button {
-                controls.setFlashMode(.on)
-            } label: {
-                settingLabel("On", isSelected: controls.settings.flashMode == .on)
-            }
-        }
     }
 
     private func settingLabel(_ title: String, isSelected: Bool) -> some View {

@@ -366,7 +366,15 @@ actor CameraSession {
 }
 
 extension CameraSession: PhotoCapturing {
-    func capturePhoto() async throws -> Photo {
-        try await photoCaptureService.capturePhoto()
+    func capturePhoto(flashMode: CameraFlashMode) async throws -> Photo {
+        let supportedFlashMode: CameraFlashMode
+
+        if photoCaptureService.supportsFlashMode(flashMode) {
+            supportedFlashMode = flashMode
+        } else {
+            supportedFlashMode = .off
+        }
+
+        return try await photoCaptureService.capturePhoto(flashMode: supportedFlashMode)
     }
 }

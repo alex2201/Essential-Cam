@@ -20,6 +20,12 @@ struct CameraCaptureView: View {
                 geometry.size.width * 16 / 9,
                 geometry.size.height
             )
+            let previewWidthToHeight = viewModel.controls.settings.aspectRatio.previewWidthToHeight
+            let cameraImageHeight = min(
+                geometry.size.width / previewWidthToHeight,
+                previewContainerHeight
+            )
+            let cameraImageTopInset = (previewContainerHeight - cameraImageHeight) / 2
 
             VStack(spacing: .zero) {
                 ZStack {
@@ -38,6 +44,11 @@ struct CameraCaptureView: View {
                         )
                 }
                 .frame(width: geometry.size.width, height: previewContainerHeight)
+                .overlay(alignment: .topTrailing) {
+                    CameraFlashButton(controls: viewModel.controls)
+                        .padding(.top, cameraImageTopInset + 8)
+                        .padding(.trailing, 8)
+                }
                 .overlay(alignment: .trailing) {
                     ZStack(alignment: .trailing) {
                         if isExposureDialPresented {

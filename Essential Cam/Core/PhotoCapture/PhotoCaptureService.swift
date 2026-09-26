@@ -8,5 +8,6 @@
 import AVFoundation
 
 protocol PhotoCaptureService: CameraCaptureComponent {
-    func capturePhoto() async throws -> Photo
+    func supportsFlashMode(_ flashMode: CameraFlashMode) -> Bool
+    func capturePhoto(flashMode: CameraFlashMode) async throws -> Photo
 }
