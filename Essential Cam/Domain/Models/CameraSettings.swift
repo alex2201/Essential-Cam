@@ -59,6 +59,19 @@ enum CameraAspectRatio: String, Codable, Equatable, Sendable {
     case square
 }
 
+extension CameraAspectRatio {
+    func widthToHeight(isPortrait: Bool) -> CGFloat {
+        switch self {
+        case .fourByThree:
+            isPortrait ? 3 / 4 : 4 / 3
+        case .sixteenByNine:
+            isPortrait ? 9 / 16 : 16 / 9
+        case .square:
+            1
+        }
+    }
+}
+
 enum CameraFlashMode: String, Codable, Equatable, Sendable {
     case off
     case on

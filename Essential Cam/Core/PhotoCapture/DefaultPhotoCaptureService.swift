@@ -21,12 +21,18 @@ final class DefaultPhotoCaptureService: PhotoCaptureService {
         photoOutput.supportedFlashModes.contains(flashMode.avFoundationValue)
     }
 
-    func capturePhoto(flashMode: CameraFlashMode) async throws -> Photo {
+    func capturePhoto(
+        flashMode: CameraFlashMode,
+        aspectRatio: CameraAspectRatio
+    ) async throws -> Photo {
         defer { activeCaptureDelegate = nil }
 
         return try await withCheckedThrowingContinuation { continuation in
             let photoSettings = createPhotoSettings(flashMode: flashMode)
-            let delegate = PhotoCaptureDelegate(continuation: continuation)
+            let delegate = PhotoCaptureDelegate(
+                aspectRatio: aspectRatio,
+                continuation: continuation
+            )
 
             activeCaptureDelegate = delegate
             photoOutput.capturePhoto(with: photoSettings, delegate: delegate)
@@ -65,12 +71,17 @@ private class PhotoCaptureDelegate: NSObject, AVCapturePhotoCaptureDelegate {
     typealias PhotoContinuation = CheckedContinuation<Photo, Error>
 
     private let continuation: PhotoContinuation
+    private let aspectRatio: CameraAspectRatio
     private var photoData: Data?
     private var previewImage: CGImage?
     private var processingError: Error?
 
     /// Creates a new delegate object with the checked continuation to call when processing is complete.
-    init(continuation: PhotoContinuation) {
+    init(
+        aspectRatio: CameraAspectRatio,
+        continuation: PhotoContinuation
+    ) {
+        self.aspectRatio = aspectRatio
         self.continuation = continuation
     }
 
@@ -79,8 +90,18 @@ private class PhotoCaptureDelegate: NSObject, AVCapturePhotoCaptureDelegate {
             processingError = error
             return
         }
-        photoData = photo.fileDataRepresentation()
-        previewImage = makeOrientedPreviewImage(from: photo)
+        guard let capturedData = photo.fileDataRepresentation() else {
+            processingError = PhotoCaptureError.noPhotoData
+            return
+        }
+
+        do {
+            photoData = try PhotoCropper.crop(capturedData, to: aspectRatio)
+            previewImage = makeOrientedPreviewImage(from: photo)
+                .flatMap { PhotoCropper.crop($0, to: aspectRatio) }
+        } catch {
+            processingError = error
+        }
     }
 
     private func makeOrientedPreviewImage(from photo: AVCapturePhoto) -> CGImage? {
@@ -126,5 +147,104 @@ private class PhotoCaptureDelegate: NSObject, AVCapturePhotoCaptureDelegate {
         let photo = Photo(data: photoData, previewImage: previewImage)
         // Resume the continuation by returning the captured photo.
         continuation.resume(returning: photo)
+    }
+}
+
+private enum PhotoCropper {
+    private static let context = CIContext()
+
+    static func crop(
+        _ data: Data,
+        to aspectRatio: CameraAspectRatio
+    ) throws -> Data {
+        guard
+            let source = CGImageSourceCreateWithData(data as CFData, nil),
+            let sourceType = CGImageSourceGetType(source),
+            let image = CIImage(
+                data: data,
+                options: [.applyOrientationProperty: true]
+            )
+        else {
+            throw PhotoCaptureError.photoProcessingFailed
+        }
+
+        let cropRect = centeredCropRect(
+            in: image.extent,
+            aspectRatio: aspectRatio
+        )
+        let croppedImage = image.cropped(to: cropRect)
+
+        guard let cgImage = context.createCGImage(croppedImage, from: cropRect) else {
+            throw PhotoCaptureError.photoProcessingFailed
+        }
+
+        let outputData = NSMutableData()
+        guard let destination = CGImageDestinationCreateWithData(
+            outputData,
+            sourceType,
+            1,
+            nil
+        ) else {
+            throw PhotoCaptureError.photoProcessingFailed
+        }
+
+        var properties = (CGImageSourceCopyPropertiesAtIndex(source, 0, nil)
+            as? [CFString: Any]) ?? [:]
+        properties[kCGImagePropertyOrientation] = CGImagePropertyOrientation.up.rawValue
+        properties[kCGImagePropertyPixelWidth] = cgImage.width
+        properties[kCGImagePropertyPixelHeight] = cgImage.height
+
+        CGImageDestinationAddImage(destination, cgImage, properties as CFDictionary)
+        guard CGImageDestinationFinalize(destination) else {
+            throw PhotoCaptureError.photoProcessingFailed
+        }
+
+        return outputData as Data
+    }
+
+    static func crop(
+        _ image: CGImage,
+        to aspectRatio: CameraAspectRatio
+    ) -> CGImage? {
+        let imageRect = CGRect(
+            x: 0,
+            y: 0,
+            width: image.width,
+            height: image.height
+        )
+        let cropRect = centeredCropRect(
+            in: imageRect,
+            aspectRatio: aspectRatio
+        ).integral
+
+        return image.cropping(to: cropRect)
+    }
+
+    private static func centeredCropRect(
+        in imageRect: CGRect,
+        aspectRatio: CameraAspectRatio
+    ) -> CGRect {
+        let targetRatio = aspectRatio.widthToHeight(
+            isPortrait: imageRect.height >= imageRect.width
+        )
+        let imageRatio = imageRect.width / imageRect.height
+
+        if imageRatio > targetRatio {
+            let width = imageRect.height * targetRatio
+            return CGRect(
+                x: imageRect.midX - width / 2,
+                y: imageRect.minY,
+                width: width,
+                height: imageRect.height
+            )
+        }
+
+        let height = imageRect.width / targetRatio
+        return CGRect(
+            x: imageRect.minX,
+            y: imageRect.midY - height / 2,
+            width: imageRect.width,
+            height: height
+        )
     }
 }

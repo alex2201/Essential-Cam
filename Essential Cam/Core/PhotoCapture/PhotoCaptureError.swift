@@ -9,4 +9,5 @@ import Foundation
 
 enum PhotoCaptureError: Error {
     case noPhotoData
+    case photoProcessingFailed
 }

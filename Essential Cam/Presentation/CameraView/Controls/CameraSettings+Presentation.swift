@@ -24,14 +24,7 @@ extension CameraAspectRatio {
     }
 
     var previewWidthToHeight: CGFloat {
-        switch self {
-        case .fourByThree:
-            3 / 4
-        case .sixteenByNine:
-            9 / 16
-        case .square:
-            1
-        }
+        widthToHeight(isPortrait: true)
     }
 }
 
