@@ -9,7 +9,7 @@ import Foundation
 
 extension CameraAspectRatio {
     static var allCases: [CameraAspectRatio] {
-        [.fourByThree, .sixteenByNine, .square]
+        [.square, .fourByThree, .sixteenByNine]
     }
 
     var displayName: String {
@@ -20,6 +20,17 @@ extension CameraAspectRatio {
             "16:9"
         case .square:
             "1:1"
+        }
+    }
+
+    var accessibilityName: String {
+        switch self {
+        case .fourByThree:
+            "4 by 3"
+        case .sixteenByNine:
+            "16 by 9"
+        case .square:
+            "Square, 1 by 1"
         }
     }
 

@@ -9,6 +9,7 @@ import SwiftUI
 
 struct QuickAccessControlsView: View {
     let controls: CameraControlsController
+    let showAspectRatioSelector: () -> Void
     let showExposureEditor: () -> Void
     let showFocusEditor: () -> Void
     let showWhiteBalanceEditor: () -> Void
@@ -37,21 +38,10 @@ struct QuickAccessControlsView: View {
 
     private var controlsContent: some View {
         VStack(spacing: 8) {
-            Menu {
-                ForEach(CameraAspectRatio.allCases, id: \.self) { ratio in
-                    Button {
-                        controls.setAspectRatio(ratio)
-                    } label: {
-                        settingLabel(
-                            ratio.displayName,
-                            isSelected: ratio == controls.settings.aspectRatio
-                        )
-                    }
-                }
-            } label: {
+            Button(action: showAspectRatioSelector) {
                 VStack(spacing: 4) {
-                    Text("FMT")
-                        .font(.system(size: 12, weight: .semibold))
+                    Image(systemName: "aspectratio")
+                        .font(.system(size: 16, weight: .semibold))
                     Text(controls.settings.aspectRatio.displayName)
                         .font(.system(size: 10))
                         .foregroundStyle(.white.opacity(0.78))
@@ -59,6 +49,9 @@ struct QuickAccessControlsView: View {
                 .frame(maxWidth: .infinity)
                 .contentShape(Rectangle())
             }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Choose aspect ratio")
+            .accessibilityValue(controls.settings.aspectRatio.accessibilityName)
 
             separator
 
@@ -114,13 +107,64 @@ struct QuickAccessControlsView: View {
             .padding(.horizontal, 8)
     }
 
-    private func settingLabel(_ title: String, isSelected: Bool) -> some View {
-        Group {
-            if isSelected {
-                Label(title, systemImage: "checkmark")
-            } else {
-                Text(title)
+}
+
+struct AspectRatioSelectionView: View {
+    let selectedAspectRatio: CameraAspectRatio
+    let selectAspectRatio: (CameraAspectRatio) -> Void
+    let dismiss: () -> Void
+
+    var body: some View {
+        VStack(spacing: 12) {
+            VStack(spacing: 0) {
+                Image(systemName: "aspectratio")
+                    .font(.system(size: 16, weight: .semibold))
+                    .foregroundStyle(.white)
+                    .frame(width: 45, height: 36)
+                    .padding(.top, 4)
+                    .accessibilityHidden(true)
+
+                ForEach(Array(CameraAspectRatio.allCases.enumerated()), id: \.element) { index, ratio in
+                    if index > 0 {
+                        Rectangle()
+                            .fill(.white.opacity(0.35))
+                            .frame(width: 29, height: 1)
+                    }
+
+                    Button {
+                        selectAspectRatio(ratio)
+                    } label: {
+                        Text(ratio.displayName)
+                            .font(.system(size: 13, weight: .semibold, design: .rounded))
+                            .foregroundStyle(
+                                ratio == selectedAspectRatio ? Color.yellow : Color.white
+                            )
+                            .frame(width: 45, height: 44)
+                            .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel(ratio.accessibilityName)
+                    .accessibilityAddTraits(
+                        ratio == selectedAspectRatio ? .isSelected : []
+                    )
+                }
             }
+            .cameraControlBackground(cornerRadius: 12)
+
+            Button(action: dismiss) {
+                Image(systemName: "xmark")
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(.white)
+                    .frame(width: 36, height: 36)
+                    .background {
+                        Circle()
+                            .fill(.black.opacity(0.55))
+                    }
+                    .contentShape(Circle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Close aspect ratio selection")
         }
+        .padding(.horizontal, 8)
     }
 }

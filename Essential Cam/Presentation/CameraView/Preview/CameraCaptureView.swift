@@ -13,6 +13,7 @@ struct CameraCaptureView: View {
     @State private var isExposureDialPresented = false
     @State private var isFocusDialPresented = false
     @State private var isWhiteBalanceDialPresented = false
+    @State private var isAspectRatioSelectorPresented = false
     @State private var isLensSelectorPresented = false
     @State private var isZoomSelectorPresented = false
     @State private var zoomFactorAtGestureStart: Double?
@@ -56,7 +57,14 @@ struct CameraCaptureView: View {
                 }
                 .overlay(alignment: .trailing) {
                     ZStack(alignment: .trailing) {
-                        if isExposureDialPresented {
+                        if isAspectRatioSelectorPresented {
+                            AspectRatioSelectionView(
+                                selectedAspectRatio: viewModel.controls.settings.aspectRatio,
+                                selectAspectRatio: selectAspectRatio,
+                                dismiss: dismissAspectRatioSelector
+                            )
+                            .transition(controlTransition)
+                        } else if isExposureDialPresented {
                             exposureEditor
                                 .transition(controlTransition)
                         } else if isFocusDialPresented {
@@ -86,6 +94,7 @@ struct CameraCaptureView: View {
                             VStack(spacing: 24) {
                                 QuickAccessControlsView(
                                     controls: viewModel.controls,
+                                    showAspectRatioSelector: showAspectRatioSelector,
                                     showExposureEditor: showExposureEditor,
                                     showFocusEditor: showFocusEditor,
                                     showWhiteBalanceEditor: showWhiteBalanceEditor
@@ -105,6 +114,10 @@ struct CameraCaptureView: View {
                             .transition(controlTransition)
                         }
                     }
+                    .animation(
+                        .easeInOut(duration: 0.25),
+                        value: isAspectRatioSelectorPresented
+                    )
                     .animation(
                         .easeInOut(duration: 0.25),
                         value: isExposureDialPresented
@@ -620,6 +633,7 @@ struct CameraCaptureView: View {
 
     private func showExposureEditor() {
         withAnimation(.easeInOut(duration: 0.25)) {
+            isAspectRatioSelectorPresented = false
             isFocusDialPresented = false
             isWhiteBalanceDialPresented = false
             isLensSelectorPresented = false
@@ -636,6 +650,7 @@ struct CameraCaptureView: View {
 
     private func showFocusEditor() {
         withAnimation(.easeInOut(duration: 0.25)) {
+            isAspectRatioSelectorPresented = false
             isExposureDialPresented = false
             isWhiteBalanceDialPresented = false
             isLensSelectorPresented = false
@@ -653,6 +668,7 @@ struct CameraCaptureView: View {
 
     private func showWhiteBalanceEditor() {
         withAnimation(.easeInOut(duration: 0.25)) {
+            isAspectRatioSelectorPresented = false
             isExposureDialPresented = false
             isFocusDialPresented = false
             isLensSelectorPresented = false
@@ -669,6 +685,7 @@ struct CameraCaptureView: View {
 
     private func showLensSelector() {
         withAnimation(.easeInOut(duration: 0.25)) {
+            isAspectRatioSelectorPresented = false
             isExposureDialPresented = false
             isFocusDialPresented = false
             isWhiteBalanceDialPresented = false
@@ -686,6 +703,7 @@ struct CameraCaptureView: View {
     private func showZoomSelector() {
         guard !zoomSelectionFactors.isEmpty else { return }
         withAnimation(.easeInOut(duration: 0.25)) {
+            isAspectRatioSelectorPresented = false
             isExposureDialPresented = false
             isFocusDialPresented = false
             isWhiteBalanceDialPresented = false
@@ -700,18 +718,42 @@ struct CameraCaptureView: View {
         }
     }
 
+    private func showAspectRatioSelector() {
+        withAnimation(.easeInOut(duration: 0.25)) {
+            isExposureDialPresented = false
+            isFocusDialPresented = false
+            isWhiteBalanceDialPresented = false
+            isLensSelectorPresented = false
+            isZoomSelectorPresented = false
+            isAspectRatioSelectorPresented = true
+        }
+    }
+
+    private func dismissAspectRatioSelector() {
+        withAnimation(.easeInOut(duration: 0.25)) {
+            isAspectRatioSelectorPresented = false
+        }
+    }
+
+    private func selectAspectRatio(_ aspectRatio: CameraAspectRatio) {
+        viewModel.controls.setAspectRatio(aspectRatio)
+        dismissAspectRatioSelector()
+    }
+
     private func selectZoomFactor(_ zoomFactor: Double) {
         viewModel.controls.setZoomFactor(zoomFactor)
         dismissZoomSelector()
     }
 
     private func selectCamera(_ camera: Camera) {
+        dismissAspectRatioSelector()
         dismissZoomSelector()
         viewModel.selectCamera(camera)
         dismissLensSelector()
     }
 
     private func toggleCameraPosition() {
+        dismissAspectRatioSelector()
         dismissLensSelector()
         dismissZoomSelector()
         viewModel.toggleCameraPosition()

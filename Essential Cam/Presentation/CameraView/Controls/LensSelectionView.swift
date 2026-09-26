@@ -377,7 +377,7 @@ private extension Double {
     }
 }
 
-private extension View {
+extension View {
     @ViewBuilder
     func cameraControlBackground(cornerRadius: CGFloat) -> some View {
         if #available(iOS 26.0, *) {
