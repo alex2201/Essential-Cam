@@ -11,6 +11,7 @@ import AVFoundation
 protocol CameraDeviceLookup {
     var backCameras: [AVCaptureDevice] { get }
     var frontCameras: [AVCaptureDevice] { get }
+    var virtualBackCameras: [AVCaptureDevice] { get }
     var availableCameras: [AVCaptureDevice] { get }
     var mainBackCamera: AVCaptureDevice? { get }
     var mainFrontCamera: AVCaptureDevice? { get }

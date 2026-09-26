@@ -80,6 +80,19 @@ actor CameraSession {
         }
     }
 
+    func availableVirtualCameras() -> [Camera] {
+        selectedVirtualCameraDevices.compactMap {
+            $0.toDomainModel()
+        }
+    }
+
+    func selectedCamera() -> Camera? {
+        guard let device = activeVideoInput?.device else { return nil }
+        return device.toDomainModel(
+            displayZoomFactor: deviceLookup.displayZoomFactor(for: device)
+        )
+    }
+
     func exposureCapabilities() -> CameraExposureCapabilities? {
         guard let device = activeVideoInput?.device else { return nil }
 
@@ -139,12 +152,34 @@ actor CameraSession {
         apply(settings.avFoundationZoomFactor, to: device)
     }
 
+    func applyAfterCameraSwitch(
+        _ settings: CameraSettings
+    ) throws(CameraSessionError) {
+        guard isSetUp, let device = activeVideoInput?.device else {
+            throw .setupFailed
+        }
+
+        do {
+            try device.lockForConfiguration()
+        } catch {
+            throw .configurationFailed
+        }
+
+        defer { device.unlockForConfiguration() }
+
+        applyAfterCameraSwitch(settings.exposure, to: device)
+        applyAfterCameraSwitch(settings.focus, to: device)
+        applyAfterCameraSwitch(settings.whiteBalance, to: device)
+        apply(settings.avFoundationZoomFactor, to: device)
+    }
+
     func selectCamera(id: Camera.ID) throws(CameraSessionError) {
         guard isSetUp else {
             throw .setupFailed
         }
 
-        guard let device = selectedCameraDevices.first(where: { $0.uniqueID == id }) else {
+        let selectableDevices = selectedCameraDevices + selectedVirtualCameraDevices
+        guard let device = selectableDevices.first(where: { $0.uniqueID == id }) else {
             throw .cameraNotFound
         }
 
@@ -223,6 +258,15 @@ actor CameraSession {
         }
     }
 
+    private var selectedVirtualCameraDevices: [AVCaptureDevice] {
+        switch selectedCameraPosition {
+        case .front:
+            return []
+        case .back:
+            return deviceLookup.virtualBackCameras
+        }
+    }
+
     private var captureComponents: [any CameraCaptureComponent] {
         [photoCaptureService, videoCaptureService]
     }
@@ -270,6 +314,27 @@ actor CameraSession {
         }
     }
 
+    private func applyAfterCameraSwitch(
+        _ exposure: ExposureSetting,
+        to device: AVCaptureDevice
+    ) {
+        guard case let .automatic(exposureBias) = exposure else {
+            apply(exposure, to: device)
+            return
+        }
+
+        let mode: AVCaptureDevice.ExposureMode = device.isExposureModeSupported(.autoExpose)
+            ? .autoExpose
+            : .continuousAutoExposure
+        device.exposureMode = mode
+
+        let supportedBias = min(
+            max(exposureBias, device.minExposureTargetBias),
+            device.maxExposureTargetBias
+        )
+        device.setExposureTargetBias(supportedBias)
+    }
+
     private func apply(
         _ focus: FocusSetting,
         to device: AVCaptureDevice
@@ -285,6 +350,22 @@ actor CameraSession {
             device.setFocusModeLocked(
                 lensPosition: min(max(lensPosition, 0), 1)
             )
+        }
+    }
+
+    private func applyAfterCameraSwitch(
+        _ focus: FocusSetting,
+        to device: AVCaptureDevice
+    ) {
+        switch focus {
+        case .auto, .continuousAuto:
+            if device.isFocusModeSupported(.autoFocus) {
+                device.focusMode = .autoFocus
+            } else {
+                apply(focus, to: device)
+            }
+        case .locked, .manual:
+            apply(focus, to: device)
         }
     }
 
@@ -309,12 +390,38 @@ actor CameraSession {
         }
     }
 
+    private func applyAfterCameraSwitch(
+        _ whiteBalance: WhiteBalanceSetting,
+        to device: AVCaptureDevice
+    ) {
+        switch whiteBalance {
+        case .auto, .continuousAuto:
+            if device.isWhiteBalanceModeSupported(.autoWhiteBalance) {
+                device.whiteBalanceMode = .autoWhiteBalance
+            } else {
+                apply(whiteBalance, to: device)
+            }
+        case .locked, .manual:
+            apply(whiteBalance, to: device)
+        }
+    }
+
     private func apply(
         _ zoomFactor: CGFloat,
         to device: AVCaptureDevice
     ) {
+        let deviceZoomFactor: CGFloat
+        if device.isVirtualDevice, device.displayVideoZoomFactorMultiplier > 0 {
+            // Virtual devices use an internal scale that starts at their widest
+            // constituent camera. Keep CameraSettings on the user-facing scale,
+            // where 1× matches the main wide-angle camera.
+            deviceZoomFactor = zoomFactor / device.displayVideoZoomFactorMultiplier
+        } else {
+            deviceZoomFactor = zoomFactor
+        }
+
         device.videoZoomFactor = min(
-            max(zoomFactor, device.minAvailableVideoZoomFactor),
+            max(deviceZoomFactor, device.minAvailableVideoZoomFactor),
             device.maxAvailableVideoZoomFactor
         )
     }

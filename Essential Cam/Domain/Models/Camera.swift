@@ -10,6 +10,7 @@ struct Camera: Identifiable, Sendable, Equatable {
     let name: String
     let position: Position
     let lens: Lens
+    let deviceKind: DeviceKind
     /// Lens magnification relative to the main camera, independent of current zoom.
     let displayZoomFactor: Double?
 }
@@ -24,6 +25,18 @@ extension Camera {
         case ultraWideAngle
         case wideAngle
         case telephoto
+        case unknown
+    }
+
+    enum DeviceKind: Sendable, Equatable {
+        case physical
+        case virtual(VirtualDeviceType)
+    }
+
+    enum VirtualDeviceType: Sendable, Equatable {
+        case dual
+        case dualWide
+        case triple
         case unknown
     }
 }

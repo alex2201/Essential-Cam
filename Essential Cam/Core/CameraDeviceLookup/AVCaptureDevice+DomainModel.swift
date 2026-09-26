@@ -18,6 +18,7 @@ extension AVCaptureDevice {
             name: localizedName,
             position: position,
             lens: domainLens,
+            deviceKind: domainDeviceKind,
             displayZoomFactor: displayZoomFactor
         )
     }
@@ -46,5 +47,22 @@ extension AVCaptureDevice {
         default:
             return .unknown
         }
+    }
+
+    private var domainDeviceKind: Camera.DeviceKind {
+        guard isVirtualDevice else { return .physical }
+
+        let type: Camera.VirtualDeviceType
+        switch deviceType {
+        case .builtInDualCamera:
+            type = .dual
+        case .builtInDualWideCamera:
+            type = .dualWide
+        case .builtInTripleCamera:
+            type = .triple
+        default:
+            type = .unknown
+        }
+        return .virtual(type)
     }
 }

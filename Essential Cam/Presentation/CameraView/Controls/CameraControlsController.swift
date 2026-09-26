@@ -71,11 +71,21 @@ final class CameraControlsController {
 
     // MARK: - Camera Synchronization
 
-    func synchronizeWithCamera() async {
+    func synchronizeWithCamera(afterCameraSwitch: Bool = false) async {
         await updateExposureCapabilities()
         await updateFocusCapabilities()
         await updateWhiteBalanceCapabilities()
-        applySettingsImmediately()
+
+        if afterCameraSwitch {
+            settingsThrottler.cancel()
+            do {
+                try await cameraSession.applyAfterCameraSwitch(settings)
+            } catch {
+                print("Couldn't apply settings after camera switch: \(error.localizedDescription)")
+            }
+        } else {
+            applySettingsImmediately()
+        }
     }
 
     // MARK: - Capture Configuration

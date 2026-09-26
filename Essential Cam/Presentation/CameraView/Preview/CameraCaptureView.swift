@@ -13,6 +13,7 @@ struct CameraCaptureView: View {
     @State private var isExposureDialPresented = false
     @State private var isFocusDialPresented = false
     @State private var isWhiteBalanceDialPresented = false
+    @State private var isLensSelectorPresented = false
 
     var body: some View {
         GeometryReader { geometry in
@@ -60,13 +61,29 @@ struct CameraCaptureView: View {
                         } else if isWhiteBalanceDialPresented {
                             whiteBalanceEditor
                                 .transition(controlTransition)
-                        } else {
-                            QuickAccessControlsView(
-                                controls: viewModel.controls,
-                                showExposureEditor: showExposureEditor,
-                                showFocusEditor: showFocusEditor,
-                                showWhiteBalanceEditor: showWhiteBalanceEditor
+                        } else if isLensSelectorPresented {
+                            LensSelectionView(
+                                physicalCameras: viewModel.availableCameras,
+                                virtualCamera: viewModel.preferredVirtualCamera,
+                                selectedCamera: viewModel.selectedCamera,
+                                selectCamera: selectCamera,
+                                dismiss: dismissLensSelector
                             )
+                            .transition(controlTransition)
+                        } else {
+                            VStack(spacing: 24) {
+                                QuickAccessControlsView(
+                                    controls: viewModel.controls,
+                                    showExposureEditor: showExposureEditor,
+                                    showFocusEditor: showFocusEditor,
+                                    showWhiteBalanceEditor: showWhiteBalanceEditor
+                                )
+
+                                LensSelectorButton(
+                                    camera: viewModel.selectedCamera,
+                                    action: showLensSelector
+                                )
+                            }
                             .transition(controlTransition)
                         }
                     }
@@ -81,6 +98,10 @@ struct CameraCaptureView: View {
                     .animation(
                         .easeInOut(duration: 0.25),
                         value: isWhiteBalanceDialPresented
+                    )
+                    .animation(
+                        .easeInOut(duration: 0.25),
+                        value: isLensSelectorPresented
                     )
                 }
 
@@ -546,6 +567,7 @@ struct CameraCaptureView: View {
         withAnimation(.easeInOut(duration: 0.25)) {
             isFocusDialPresented = false
             isWhiteBalanceDialPresented = false
+            isLensSelectorPresented = false
             isExposureDialPresented = true
         }
     }
@@ -560,6 +582,7 @@ struct CameraCaptureView: View {
         withAnimation(.easeInOut(duration: 0.25)) {
             isExposureDialPresented = false
             isWhiteBalanceDialPresented = false
+            isLensSelectorPresented = false
             isFocusDialPresented = true
         }
     }
@@ -575,6 +598,7 @@ struct CameraCaptureView: View {
         withAnimation(.easeInOut(duration: 0.25)) {
             isExposureDialPresented = false
             isFocusDialPresented = false
+            isLensSelectorPresented = false
             isWhiteBalanceDialPresented = true
         }
     }
@@ -583,6 +607,26 @@ struct CameraCaptureView: View {
         withAnimation(.easeInOut(duration: 0.25)) {
             isWhiteBalanceDialPresented = false
         }
+    }
+
+    private func showLensSelector() {
+        withAnimation(.easeInOut(duration: 0.25)) {
+            isExposureDialPresented = false
+            isFocusDialPresented = false
+            isWhiteBalanceDialPresented = false
+            isLensSelectorPresented = true
+        }
+    }
+
+    private func dismissLensSelector() {
+        withAnimation(.easeInOut(duration: 0.25)) {
+            isLensSelectorPresented = false
+        }
+    }
+
+    private func selectCamera(_ camera: Camera) {
+        viewModel.selectCamera(camera)
+        dismissLensSelector()
     }
 }
 

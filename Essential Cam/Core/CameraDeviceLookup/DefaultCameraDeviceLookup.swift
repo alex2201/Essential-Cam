@@ -51,6 +51,10 @@ final class DefaultCameraDeviceLookup: CameraDeviceLookup {
         frontCameraDiscoverySession.devices
     }
 
+    var virtualBackCameras: [AVCaptureDevice] {
+        virtualBackCameraDiscoverySession.devices
+    }
+
     var availableCameras: [AVCaptureDevice] {
         backCameras + frontCameras
     }

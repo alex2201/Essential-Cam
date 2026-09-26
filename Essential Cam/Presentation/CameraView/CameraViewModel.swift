@@ -19,6 +19,14 @@ final class CameraViewModel {
     var isPhotoPreviewPresented = false
     private(set) var captureOrientation = CaptureOrientation.portrait
     private(set) var availableCameras: [Camera] = []
+    private(set) var availableVirtualCameras: [Camera] = []
+    private(set) var selectedCamera: Camera?
+
+    var preferredVirtualCamera: Camera? {
+        availableVirtualCameras.max {
+            $0.virtualDevicePriority < $1.virtualDevicePriority
+        }
+    }
 
     // MARK: - Camera Controls
 
@@ -47,6 +55,8 @@ final class CameraViewModel {
         do {
             try await cameraSession.start()
             availableCameras = await cameraSession.availableCameras()
+            availableVirtualCameras = await cameraSession.availableVirtualCameras()
+            selectedCamera = await cameraSession.selectedCamera()
             await controls.synchronizeWithCamera()
             cameraStatus = .running
         } catch {
@@ -93,9 +103,28 @@ final class CameraViewModel {
         Task {
             do {
                 try await cameraSession.selectCamera(id: camera.id)
-                await controls.synchronizeWithCamera()
+                await controls.synchronizeWithCamera(afterCameraSwitch: true)
+                selectedCamera = camera
             } catch {
                 print("Couldn't select camera: \(error.localizedDescription)")
+            }
+        }
+    }
+}
+
+private extension Camera {
+    var virtualDevicePriority: Int {
+        switch deviceKind {
+        case .physical:
+            0
+        case let .virtual(type):
+            switch type {
+            case .triple:
+                3
+            case .dualWide, .dual:
+                2
+            case .unknown:
+                1
             }
         }
     }
