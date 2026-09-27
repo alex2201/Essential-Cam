@@ -230,7 +230,7 @@ private class PhotoCaptureDelegate: NSObject, AVCapturePhotoCaptureDelegate {
     }
 }
 
-private enum PhotoCropper {
+enum PhotoCropper {
     private static let context = CIContext()
 
     static func process(
@@ -272,8 +272,10 @@ private enum PhotoCropper {
             throw PhotoCaptureError.photoProcessingFailed
         }
 
-        var properties = (CGImageSourceCopyPropertiesAtIndex(source, 0, nil)
-            as? [CFString: Any]) ?? [:]
+        var properties = outputProperties(
+            copiedFrom: source,
+            outputFormat: outputFormat
+        )
         properties[kCGImagePropertyOrientation] = CGImagePropertyOrientation.up.rawValue
         properties[kCGImagePropertyPixelWidth] = cgImage.width
         properties[kCGImagePropertyPixelHeight] = cgImage.height
@@ -284,6 +286,21 @@ private enum PhotoCropper {
         }
 
         return outputData as Data
+    }
+
+    private static func outputProperties(
+        copiedFrom source: CGImageSource,
+        outputFormat: PhotoOutputFormat
+    ) -> [CFString: Any] {
+        // PNG stores orientation in an eXIf chunk. Copying all metadata from the
+        // HEIF/JPEG capture can leave the original orientation in that chunk even
+        // though Core Image has already rotated the pixels. Photos then applies the
+        // orientation a second time. Start PNG metadata clean and explicitly mark
+        // the rendered pixels as upright below.
+        guard outputFormat != .png else { return [:] }
+
+        return (CGImageSourceCopyPropertiesAtIndex(source, 0, nil)
+            as? [CFString: Any]) ?? [:]
     }
 
     static func crop(
