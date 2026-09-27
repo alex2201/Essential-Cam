@@ -16,6 +16,12 @@ struct CameraView: View {
             Color.black.ignoresSafeArea()
 
             VStack(spacing: .zero) {
+#if targetEnvironment(simulator)
+                CameraCaptureView(
+                    viewModel: viewModel,
+                    showSettings: { isSettingsPresented = true }
+                )
+#else
                 switch viewModel.cameraStatus {
                 case .running:
                     CameraCaptureView(
@@ -29,6 +35,7 @@ struct CameraView: View {
                 case .unknown:
                     ProgressView()
                 }
+#endif
             }
         }
         .sheet(isPresented: $viewModel.isPhotoPreviewPresented) {
@@ -43,7 +50,9 @@ struct CameraView: View {
             CameraSettingsView(viewModel: viewModel)
         }
         .task {
+#if !targetEnvironment(simulator)
             await viewModel.start()
+#endif
         }
     }
 }

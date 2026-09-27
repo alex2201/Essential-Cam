@@ -41,15 +41,29 @@ extension CameraPreview {
             ])
 
 #if targetEnvironment(simulator)
-            // The capture APIs require running on a real device. If running
-            // in Simulator, display a static image to represent the video feed.
-            let imageView = UIImageView()
-            // TODO: Add asset for simulator
-            //            imageView.image = UIImage(named: "video_mode")
-            imageView.contentMode = .scaleAspectFill
-            // The image view resizes to fill the preview area.
-            imageView.autoresizingMask = [.flexibleWidth, .flexibleHeight]
-            contentView.addSubview(imageView)
+            let gradientLayer = CAGradientLayer()
+            gradientLayer.colors = [
+                UIColor(white: 0.18, alpha: 1).cgColor,
+                UIColor(white: 0.04, alpha: 1).cgColor
+            ]
+            gradientLayer.startPoint = CGPoint(x: 0.15, y: 0)
+            gradientLayer.endPoint = CGPoint(x: 0.85, y: 1)
+            contentView.layer.addSublayer(gradientLayer)
+            simulatorGradientLayer = gradientLayer
+
+            let symbolView = UIImageView(image: UIImage(systemName: "camera.aperture"))
+            symbolView.translatesAutoresizingMaskIntoConstraints = false
+            symbolView.preferredSymbolConfiguration = UIImage.SymbolConfiguration(
+                pointSize: 42,
+                weight: .ultraLight
+            )
+            symbolView.tintColor = UIColor.white.withAlphaComponent(0.16)
+            contentView.addSubview(symbolView)
+
+            NSLayoutConstraint.activate([
+                symbolView.centerXAnchor.constraint(equalTo: contentView.centerXAnchor),
+                symbolView.centerYAnchor.constraint(equalTo: contentView.centerYAnchor)
+            ])
 #endif
         }
 
@@ -57,9 +71,20 @@ extension CameraPreview {
             fatalError("init(coder:) has not been implemented")
         }
 
+        override func layoutSubviews() {
+            super.layoutSubviews()
+#if targetEnvironment(simulator)
+            simulatorGradientLayer?.frame = contentView.bounds
+#endif
+        }
+
         var previewLayer: AVCaptureVideoPreviewLayer {
             contentView.previewLayer
         }
+
+#if targetEnvironment(simulator)
+        private var simulatorGradientLayer: CAGradientLayer?
+#endif
     }
 
     final class PreviewContentView: UIView {

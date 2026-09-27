@@ -79,6 +79,11 @@ final class CameraViewModel {
     // MARK: - Photo Capture
 
     func captureAction() {
+#if targetEnvironment(simulator)
+        // Simulator builds are intended for reviewing the camera interface.
+        // Photo capture requires camera hardware, so keep the shutter inert.
+        return
+#else
         guard !isPerformingCaptureOperation else { return }
         isPerformingCaptureOperation = true
 
@@ -102,6 +107,7 @@ final class CameraViewModel {
                 print("Couldn't capture photo: \(error.localizedDescription)")
             }
         }
+#endif
     }
 
     // MARK: - Camera Selection
