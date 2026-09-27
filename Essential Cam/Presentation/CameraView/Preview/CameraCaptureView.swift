@@ -100,7 +100,6 @@ struct CameraCaptureView: View {
                     CapturedPhotoTransitionView(
                         preview: displayedCapturePreview,
                         containerSize: geometry.size,
-                        previewContainerHeight: previewContainerHeight,
                         isFlyingToGallery: isCapturePreviewFlyingToGallery
                     )
                     .allowsHitTesting(false)
@@ -173,29 +172,22 @@ struct CameraCaptureView: View {
 private struct CapturedPhotoTransitionView: View {
     let preview: CapturedPhotoPreview
     let containerSize: CGSize
-    let previewContainerHeight: CGFloat
     let isFlyingToGallery: Bool
 
     private var displayedSize: CGSize {
         if isFlyingToGallery {
             return thumbnailSize
         }
-
-        let availableSize = CGSize(
-            width: containerSize.width,
-            height: previewContainerHeight
-        )
-        let availableAspectRatio = availableSize.width / availableSize.height
-
-        if preview.aspectRatio > availableAspectRatio {
+        let maximumDimension: CGFloat = 100
+        if preview.aspectRatio >= 1 {
             return CGSize(
-                width: availableSize.width,
-                height: availableSize.width / preview.aspectRatio
+                width: maximumDimension,
+                height: maximumDimension / preview.aspectRatio
             )
         }
         return CGSize(
-            width: availableSize.height * preview.aspectRatio,
-            height: availableSize.height
+            width: maximumDimension * preview.aspectRatio,
+            height: maximumDimension
         )
     }
 
@@ -216,9 +208,11 @@ private struct CapturedPhotoTransitionView: View {
     private var position: CGPoint {
         if isFlyingToGallery {
             // Matches the center of the 60-point gallery button with its padding.
-            return CGPoint(x: 46, y: containerSize.height - 78)
+            return CGPoint(x: 46, y: containerSize.height - 46)
         }
-        return CGPoint(x: containerSize.width / 2, y: previewContainerHeight / 2)
+        // Centers the preview in a 100-point container that shares the
+        // gallery button's 16-point leading and bottom padding.
+        return CGPoint(x: 66, y: containerSize.height - 66)
     }
 
     var body: some View {
@@ -226,15 +220,15 @@ private struct CapturedPhotoTransitionView: View {
             .resizable()
             .scaledToFill()
             .frame(width: displayedSize.width, height: displayedSize.height)
-            .clipShape(.rect(cornerRadius: isFlyingToGallery ? 5 : 0))
+            .clipShape(.rect(cornerRadius: isFlyingToGallery ? 5 : 9))
             .overlay {
-                RoundedRectangle(cornerRadius: isFlyingToGallery ? 5 : 0)
-                    .stroke(.white.opacity(isFlyingToGallery ? 0.9 : 0), lineWidth: 1)
+                RoundedRectangle(cornerRadius: isFlyingToGallery ? 5 : 9)
+                    .stroke(.white.opacity(0.9), lineWidth: 1)
             }
             .shadow(
-                color: .black.opacity(isFlyingToGallery ? 0.45 : 0),
-                radius: isFlyingToGallery ? 2 : 0,
-                y: isFlyingToGallery ? 1 : 0
+                color: .black.opacity(0.45),
+                radius: isFlyingToGallery ? 2 : 5,
+                y: isFlyingToGallery ? 1 : 3
             )
             .position(position)
     }
