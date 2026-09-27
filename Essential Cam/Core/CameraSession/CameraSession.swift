@@ -564,7 +564,8 @@ extension CameraSession: PhotoCapturing {
     func capturePhoto(
         flashMode: CameraFlashMode,
         aspectRatio: CameraAspectRatio,
-        outputFormat: PhotoOutputFormat
+        outputFormat: PhotoOutputFormat,
+        previewHandler: @escaping @Sendable (CGImage) -> Void
     ) async throws -> Photo {
         let supportedFlashMode: CameraFlashMode
 
@@ -577,7 +578,8 @@ extension CameraSession: PhotoCapturing {
         return try await photoCaptureService.capturePhoto(
             flashMode: supportedFlashMode,
             aspectRatio: aspectRatio,
-            outputFormat: outputFormat
+            outputFormat: outputFormat,
+            previewHandler: previewHandler
         )
     }
 }

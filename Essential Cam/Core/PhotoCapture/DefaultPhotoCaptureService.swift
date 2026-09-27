@@ -61,7 +61,8 @@ final class DefaultPhotoCaptureService: PhotoCaptureService {
     func capturePhoto(
         flashMode: CameraFlashMode,
         aspectRatio: CameraAspectRatio,
-        outputFormat: PhotoOutputFormat
+        outputFormat: PhotoOutputFormat,
+        previewHandler: @escaping @Sendable (CGImage) -> Void
     ) async throws -> Photo {
         defer { activeCaptureDelegate = nil }
 
@@ -76,6 +77,7 @@ final class DefaultPhotoCaptureService: PhotoCaptureService {
             let delegate = PhotoCaptureDelegate(
                 aspectRatio: aspectRatio,
                 outputFormat: outputFormat,
+                previewHandler: previewHandler,
                 continuation: continuation
             )
 
@@ -142,6 +144,7 @@ private class PhotoCaptureDelegate: NSObject, AVCapturePhotoCaptureDelegate {
     private let continuation: PhotoContinuation
     private let aspectRatio: CameraAspectRatio
     private let outputFormat: PhotoOutputFormat
+    private let previewHandler: @Sendable (CGImage) -> Void
     private var photoData: Data?
     private var previewImage: CGImage?
     private var processingError: Error?
@@ -150,10 +153,12 @@ private class PhotoCaptureDelegate: NSObject, AVCapturePhotoCaptureDelegate {
     init(
         aspectRatio: CameraAspectRatio,
         outputFormat: PhotoOutputFormat,
+        previewHandler: @escaping @Sendable (CGImage) -> Void,
         continuation: PhotoContinuation
     ) {
         self.aspectRatio = aspectRatio
         self.outputFormat = outputFormat
+        self.previewHandler = previewHandler
         self.continuation = continuation
     }
 
@@ -168,13 +173,17 @@ private class PhotoCaptureDelegate: NSObject, AVCapturePhotoCaptureDelegate {
         }
 
         do {
+            previewImage = makeOrientedPreviewImage(from: photo)
+                .flatMap { PhotoCropper.crop($0, to: aspectRatio) }
+            if let previewImage {
+                previewHandler(previewImage)
+            }
+
             photoData = try PhotoCropper.process(
                 capturedData,
                 to: aspectRatio,
                 outputFormat: outputFormat
             )
-            previewImage = makeOrientedPreviewImage(from: photo)
-                .flatMap { PhotoCropper.crop($0, to: aspectRatio) }
         } catch {
             processingError = error
         }

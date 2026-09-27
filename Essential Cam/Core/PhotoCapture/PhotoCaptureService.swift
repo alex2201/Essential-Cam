@@ -6,6 +6,7 @@
 //
 
 import AVFoundation
+import CoreGraphics
 
 protocol PhotoCaptureService: CameraCaptureComponent {
     func supportsFlashMode(_ flashMode: CameraFlashMode) -> Bool
@@ -13,6 +14,7 @@ protocol PhotoCaptureService: CameraCaptureComponent {
     func capturePhoto(
         flashMode: CameraFlashMode,
         aspectRatio: CameraAspectRatio,
-        outputFormat: PhotoOutputFormat
+        outputFormat: PhotoOutputFormat,
+        previewHandler: @escaping @Sendable (CGImage) -> Void
     ) async throws -> Photo
 }

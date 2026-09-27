@@ -15,6 +15,7 @@ final class CameraViewModel {
 
     var cameraStatus = CameraStatus.unknown
     var isPerformingCaptureOperation = false
+    private(set) var capturedPhotoPreview: CapturedPhotoPreview?
     private(set) var recentPhotoThumbnails: [PhotoLibraryThumbnail] = []
     private(set) var captureOrientation = CaptureOrientation.portrait
     private(set) var availableCameras: [Camera] = []
@@ -86,7 +87,7 @@ final class CameraViewModel {
         guard !isPerformingCaptureOperation else { return }
         isPerformingCaptureOperation = true
 
-        Task {
+        Task { [self] in
             defer { isPerformingCaptureOperation = false }
 
             let useCase = PhotoCaptureUseCase(
@@ -95,11 +96,21 @@ final class CameraViewModel {
             )
 
             do {
-                _ = try await useCase.execute(
+                let photo = try await useCase.execute(
                     flashMode: controls.settings.flashMode,
                     aspectRatio: controls.settings.aspectRatio,
-                    outputFormat: controls.settings.photoOutputFormat
+                    outputFormat: controls.settings.photoOutputFormat,
+                    previewHandler: { [weak self] previewImage in
+                        Task { @MainActor [weak self] in
+                            self?.capturedPhotoPreview = CapturedPhotoPreview(
+                                image: previewImage
+                            )
+                        }
+                    }
                 )
+                if capturedPhotoPreview == nil, let previewImage = photo.previewImage {
+                    capturedPhotoPreview = CapturedPhotoPreview(image: previewImage)
+                }
                 await refreshRecentPhotoThumbnails()
             } catch {
                 print("Couldn't capture photo: \(error.localizedDescription)")
@@ -162,6 +173,16 @@ final class CameraViewModel {
            let fallback = availablePhotoOutputFormats.first {
             controls.setPhotoOutputFormat(fallback)
         }
+    }
+}
+
+struct CapturedPhotoPreview: Identifiable {
+    let id = UUID()
+    let image: CGImage
+
+    var aspectRatio: CGFloat {
+        guard image.height > 0 else { return 1 }
+        return CGFloat(image.width) / CGFloat(image.height)
     }
 }
 

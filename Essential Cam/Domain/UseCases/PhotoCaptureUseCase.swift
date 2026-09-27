@@ -5,11 +5,14 @@
 //  Created by Alexander López on 04/09/26.
 //
 
+import CoreGraphics
+
 protocol PhotoCapturing: Sendable {
     func capturePhoto(
         flashMode: CameraFlashMode,
         aspectRatio: CameraAspectRatio,
-        outputFormat: PhotoOutputFormat
+        outputFormat: PhotoOutputFormat,
+        previewHandler: @escaping @Sendable (CGImage) -> Void
     ) async throws -> Photo
 }
 
@@ -25,12 +28,14 @@ struct PhotoCaptureUseCase {
     func execute(
         flashMode: CameraFlashMode,
         aspectRatio: CameraAspectRatio,
-        outputFormat: PhotoOutputFormat
+        outputFormat: PhotoOutputFormat,
+        previewHandler: @escaping @Sendable (CGImage) -> Void = { _ in }
     ) async throws -> Photo {
         let photo = try await photoCapture.capturePhoto(
             flashMode: flashMode,
             aspectRatio: aspectRatio,
-            outputFormat: outputFormat
+            outputFormat: outputFormat,
+            previewHandler: previewHandler
         )
         try await photoSaving.save(photo)
 
