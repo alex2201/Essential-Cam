@@ -15,6 +15,9 @@ struct CameraCaptureView: View {
     @State private var zoomFactorAtGestureStart: Double?
     @State private var displayedCapturePreview: CapturedPhotoPreview?
     @State private var isCapturePreviewFlyingToGallery = false
+    @State private var selectedCaptureMode: CaptureMode = .photo
+    @State private var displayedCaptureMode: CaptureMode = .photo
+    @State private var captureIndicatorScale: CGFloat = 1
 
     var body: some View {
         GeometryReader { geometry in
@@ -57,11 +60,25 @@ struct CameraCaptureView: View {
                     .padding(8)
             }
             .overlay(alignment: .bottom) {
-                CaptureControlsView(
-                    captureAction: viewModel.captureAction,
-                    isCaptureDisabled: viewModel.isPerformingCaptureOperation
-                )
+                Group {
+                    switch displayedCaptureMode {
+                    case .photo:
+                        CaptureControlsView(
+                            captureAction: viewModel.captureAction,
+                            isCaptureDisabled: viewModel.isPerformingCaptureOperation,
+                            indicatorScale: captureIndicatorScale
+                        )
+                    case .video:
+                        VideoCaptureControlsView(
+                            recordAction: {},
+                            indicatorScale: captureIndicatorScale
+                        )
+                    }
+                }
                 .padding(.bottom, 42)
+                .task(id: selectedCaptureMode) {
+                    await animateCaptureButton(to: selectedCaptureMode)
+                }
             }
             .overlay(alignment: .bottomLeading) {
                 Button(action: showGallery) {
@@ -72,6 +89,11 @@ struct CameraCaptureView: View {
                 .padding(.bottom, 48)
                 .accessibilityLabel("Open Photo Library")
                 .accessibilityHint("Shows your photos in a grid")
+            }
+            .overlay(alignment: .bottomTrailing) {
+                CaptureModeButton(selectedMode: $selectedCaptureMode)
+                    .padding(.trailing, 16)
+                    .padding(.bottom, 16)
             }
             .overlay {
                 if let displayedCapturePreview {
@@ -122,6 +144,28 @@ struct CameraCaptureView: View {
             .onEnded { _ in
                 zoomFactorAtGestureStart = nil
             }
+    }
+
+    @MainActor
+    private func animateCaptureButton(to mode: CaptureMode) async {
+        guard displayedCaptureMode != mode else { return }
+
+        withAnimation(.easeIn(duration: 0.14)) {
+            captureIndicatorScale = 0.08
+        }
+
+        try? await Task.sleep(for: .milliseconds(140))
+        guard !Task.isCancelled else { return }
+
+        var transaction = Transaction()
+        transaction.disablesAnimations = true
+        withTransaction(transaction) {
+            displayedCaptureMode = mode
+        }
+
+        withAnimation(.spring(response: 0.38, dampingFraction: 0.72)) {
+            captureIndicatorScale = 1
+        }
     }
 
 }

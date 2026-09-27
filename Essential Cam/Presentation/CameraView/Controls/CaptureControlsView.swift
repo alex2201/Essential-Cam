@@ -10,6 +10,7 @@ import SwiftUI
 struct CaptureControlsView: View {
     let captureAction: () -> Void
     let isCaptureDisabled: Bool
+    var indicatorScale: CGFloat = 1
 
     var body: some View {
         Button(action: captureAction) {
@@ -20,6 +21,7 @@ struct CaptureControlsView: View {
                 Circle()
                     .fill(.white)
                     .padding(8)
+                    .scaleEffect(indicatorScale)
             }
             .frame(width: 72, height: 72)
             .contentShape(Circle())
@@ -34,7 +36,7 @@ struct CaptureControlsView: View {
     }
 }
 
-private struct CaptureButtonStyle: ButtonStyle {
+struct CaptureButtonStyle: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
             .scaleEffect(configuration.isPressed ? 0.9 : 1)
@@ -45,7 +47,7 @@ private struct CaptureButtonStyle: ButtonStyle {
     }
 }
 
-private extension View {
+extension View {
     @ViewBuilder
     func captureButtonBackground() -> some View {
         if #available(iOS 26.0, *) {
