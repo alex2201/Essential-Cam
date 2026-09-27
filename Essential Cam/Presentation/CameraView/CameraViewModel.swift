@@ -15,8 +15,7 @@ final class CameraViewModel {
 
     var cameraStatus = CameraStatus.unknown
     var isPerformingCaptureOperation = false
-    var capturedPhotoPreview: CGImage?
-    var isPhotoPreviewPresented = false
+    private(set) var recentPhotoThumbnails: [PhotoLibraryThumbnail] = []
     private(set) var captureOrientation = CaptureOrientation.portrait
     private(set) var availableCameras: [Camera] = []
     private(set) var availableVirtualCameras: [Camera] = []
@@ -96,18 +95,21 @@ final class CameraViewModel {
             )
 
             do {
-                let photo = try await useCase.execute(
+                _ = try await useCase.execute(
                     flashMode: controls.settings.flashMode,
                     aspectRatio: controls.settings.aspectRatio,
                     outputFormat: controls.settings.photoOutputFormat
                 )
-                capturedPhotoPreview = photo.previewImage
-                isPhotoPreviewPresented = photo.previewImage != nil
+                await refreshRecentPhotoThumbnails()
             } catch {
                 print("Couldn't capture photo: \(error.localizedDescription)")
             }
         }
 #endif
+    }
+
+    func refreshRecentPhotoThumbnails() async {
+        recentPhotoThumbnails = await DefaultPhotoLibrary().latestThumbnails()
     }
 
     // MARK: - Camera Selection

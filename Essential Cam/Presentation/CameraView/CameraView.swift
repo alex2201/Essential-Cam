@@ -8,8 +8,10 @@
 import SwiftUI
 
 struct CameraView: View {
+    @Environment(\.scenePhase) private var scenePhase
     @State private var viewModel = CameraViewModel()
     @State private var isSettingsPresented = false
+    @State private var isGalleryPresented = false
 
     var body: some View {
         ZStack {
@@ -19,14 +21,16 @@ struct CameraView: View {
 #if targetEnvironment(simulator)
                 CameraCaptureView(
                     viewModel: viewModel,
-                    showSettings: { isSettingsPresented = true }
+                    showSettings: { isSettingsPresented = true },
+                    showGallery: { isGalleryPresented = true }
                 )
 #else
                 switch viewModel.cameraStatus {
                 case .running:
                     CameraCaptureView(
                         viewModel: viewModel,
-                        showSettings: { isSettingsPresented = true }
+                        showSettings: { isSettingsPresented = true },
+                        showGallery: { isGalleryPresented = true }
                     )
                 case .failed, .interrupted:
                     Text("Something went wrong")
@@ -38,35 +42,23 @@ struct CameraView: View {
 #endif
             }
         }
-        .sheet(isPresented: $viewModel.isPhotoPreviewPresented) {
-            if let previewImage = viewModel.capturedPhotoPreview {
-                CapturedPhotoPreview(previewImage: previewImage)
-                    .onDisappear {
-                        viewModel.capturedPhotoPreview = nil
-                    }
-            }
-        }
         .fullScreenCover(isPresented: $isSettingsPresented) {
             CameraSettingsView(viewModel: viewModel)
+        }
+        .fullScreenCover(isPresented: $isGalleryPresented) {
+            PhotoGalleryView()
         }
         .task {
 #if !targetEnvironment(simulator)
             await viewModel.start()
 #endif
+            await viewModel.refreshRecentPhotoThumbnails()
         }
-    }
-}
-
-extension CameraView {
-    struct CapturedPhotoPreview: View {
-        let previewImage: CGImage
-
-        var body: some View {
-            Image(decorative: previewImage, scale: 1)
-                .resizable()
-                .scaledToFit()
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .background(Color.black)
+        .onChange(of: scenePhase) { _, newPhase in
+            guard newPhase == .active else { return }
+            Task {
+                await viewModel.refreshRecentPhotoThumbnails()
+            }
         }
     }
 }

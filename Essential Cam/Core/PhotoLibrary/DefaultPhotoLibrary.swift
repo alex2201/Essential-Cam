@@ -6,6 +6,13 @@
 //
 
 import Photos
+import UIKit
+
+struct PhotoLibraryThumbnail: Identifiable, @unchecked Sendable {
+    let id: String
+    let image: UIImage
+    let aspectRatio: CGFloat
+}
 
 struct DefaultPhotoLibrary: PhotoSaving {
     func save(_ photo: Photo) async throws {
@@ -19,6 +26,66 @@ struct DefaultPhotoLibrary: PhotoSaving {
                     data: photo.data,
                     options: options
                 )
+        }
+    }
+
+    func latestThumbnails(limit: Int = 3) async -> [PhotoLibraryThumbnail] {
+        let authorizationStatus = await PHPhotoLibrary.requestAuthorization(for: .readWrite)
+        guard authorizationStatus == .authorized || authorizationStatus == .limited else {
+            return []
+        }
+
+        let fetchOptions = PHFetchOptions()
+        fetchOptions.fetchLimit = limit
+        fetchOptions.sortDescriptors = [
+            NSSortDescriptor(key: #keyPath(PHAsset.creationDate), ascending: false)
+        ]
+
+        let assets = PHAsset.fetchAssets(
+            with: .image,
+            options: fetchOptions
+        )
+        var thumbnails: [PhotoLibraryThumbnail] = []
+
+        for index in 0..<assets.count {
+            let asset = assets.object(at: index)
+            if let thumbnail = await thumbnail(for: asset) {
+                thumbnails.append(thumbnail)
+            }
+        }
+
+        return thumbnails
+    }
+
+    private func thumbnail(for asset: PHAsset) async -> PhotoLibraryThumbnail? {
+        let requestOptions = PHImageRequestOptions()
+        requestOptions.deliveryMode = .highQualityFormat
+        requestOptions.resizeMode = .fast
+        requestOptions.isNetworkAccessAllowed = true
+
+        return await withCheckedContinuation { continuation in
+            PHImageManager.default().requestImage(
+                for: asset,
+                targetSize: CGSize(width: 180, height: 180),
+                contentMode: .aspectFit,
+                options: requestOptions
+            ) { image, _ in
+                guard let image else {
+                    continuation.resume(returning: nil)
+                    return
+                }
+
+                let aspectRatio = asset.pixelHeight > 0
+                    ? CGFloat(asset.pixelWidth) / CGFloat(asset.pixelHeight)
+                    : 1
+                continuation.resume(
+                    returning: PhotoLibraryThumbnail(
+                        id: asset.localIdentifier,
+                        image: image,
+                        aspectRatio: aspectRatio
+                    )
+                )
+            }
         }
     }
 }
