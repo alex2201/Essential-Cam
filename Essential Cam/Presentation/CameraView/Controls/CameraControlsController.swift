@@ -118,6 +118,12 @@ final class CameraControlsController {
         isDeviceApplicationSuppressed = false
     }
 
+    func setPhotoOutputFormat(_ outputFormat: PhotoOutputFormat) {
+        isDeviceApplicationSuppressed = true
+        settings.photoOutputFormat = outputFormat
+        isDeviceApplicationSuppressed = false
+    }
+
     // MARK: - Zoom
 
     func setZoomFactor(_ zoomFactor: Double) {

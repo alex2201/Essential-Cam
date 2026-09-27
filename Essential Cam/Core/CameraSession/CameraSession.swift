@@ -102,6 +102,10 @@ actor CameraSession {
         deviceLookup.mainFrontCamera != nil && deviceLookup.mainBackCamera != nil
     }
 
+    func availablePhotoOutputFormats() -> [PhotoOutputFormat] {
+        photoCaptureService.availablePhotoOutputFormats()
+    }
+
     func exposureCapabilities() -> CameraExposureCapabilities? {
         guard let device = activeVideoInput?.device else { return nil }
 
@@ -559,7 +563,8 @@ actor CameraSession {
 extension CameraSession: PhotoCapturing {
     func capturePhoto(
         flashMode: CameraFlashMode,
-        aspectRatio: CameraAspectRatio
+        aspectRatio: CameraAspectRatio,
+        outputFormat: PhotoOutputFormat
     ) async throws -> Photo {
         let supportedFlashMode: CameraFlashMode
 
@@ -571,7 +576,8 @@ extension CameraSession: PhotoCapturing {
 
         return try await photoCaptureService.capturePhoto(
             flashMode: supportedFlashMode,
-            aspectRatio: aspectRatio
+            aspectRatio: aspectRatio,
+            outputFormat: outputFormat
         )
     }
 }

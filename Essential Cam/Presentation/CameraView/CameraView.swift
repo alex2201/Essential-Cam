@@ -9,6 +9,7 @@ import SwiftUI
 
 struct CameraView: View {
     @State private var viewModel = CameraViewModel()
+    @State private var isSettingsPresented = false
 
     var body: some View {
         ZStack {
@@ -17,7 +18,10 @@ struct CameraView: View {
             VStack(spacing: .zero) {
                 switch viewModel.cameraStatus {
                 case .running:
-                    CameraCaptureView(viewModel: viewModel)
+                    CameraCaptureView(
+                        viewModel: viewModel,
+                        showSettings: { isSettingsPresented = true }
+                    )
                 case .failed, .interrupted:
                     Text("Something went wrong")
                 case .unauthorized:
@@ -34,6 +38,9 @@ struct CameraView: View {
                         viewModel.capturedPhotoPreview = nil
                     }
             }
+        }
+        .fullScreenCover(isPresented: $isSettingsPresented) {
+            CameraSettingsView(viewModel: viewModel)
         }
         .task {
             await viewModel.start()

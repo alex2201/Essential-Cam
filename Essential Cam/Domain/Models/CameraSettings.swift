@@ -15,6 +15,7 @@ struct CameraSettings: Codable, Equatable, Sendable {
     var captureMode: CaptureMode
     var aspectRatio: CameraAspectRatio
     var flashMode: CameraFlashMode
+    var photoOutputFormat: PhotoOutputFormat = .heif
 }
 
 extension CameraSettings {
@@ -25,7 +26,8 @@ extension CameraSettings {
         zoomFactor: 1,
         captureMode: .photo,
         aspectRatio: .fourByThree,
-        flashMode: .off
+        flashMode: .off,
+        photoOutputFormat: .heif
     )
 }
 
@@ -76,4 +78,17 @@ enum CameraFlashMode: String, Codable, Equatable, Sendable {
     case off
     case on
     case automatic
+}
+
+enum PhotoOutputFormat: String, Codable, Equatable, Sendable, CaseIterable {
+    case heif
+    case jpeg
+    case png
+    case tiff
+    case raw
+    case appleProRAW
+
+    var isRAW: Bool {
+        self == .raw || self == .appleProRAW
+    }
 }

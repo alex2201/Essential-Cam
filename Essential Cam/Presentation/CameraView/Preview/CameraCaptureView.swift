@@ -9,6 +9,7 @@ import SwiftUI
 
 struct CameraCaptureView: View {
     let viewModel: CameraViewModel
+    let showSettings: () -> Void
 
     @State private var isExposureDialPresented = false
     @State private var isFocusDialPresented = false
@@ -53,6 +54,11 @@ struct CameraCaptureView: View {
                 .overlay(alignment: .topTrailing) {
                     CameraFlashButton(controls: viewModel.controls)
                         .padding(.top, cameraImageTopInset + 8)
+                        .padding(.trailing, 8)
+                }
+                .overlay(alignment: .bottomTrailing) {
+                    CameraSettingsButton(action: showSettings)
+                        .padding(.bottom, cameraImageTopInset + 8)
                         .padding(.trailing, 8)
                 }
                 .overlay(alignment: .trailing) {
@@ -170,10 +176,7 @@ struct CameraCaptureView: View {
                 .transition(.opacity)
             }
             .frame(width: exposureMode == .manual ? 108 : 50)
-            .background {
-                RoundedRectangle(cornerRadius: 16)
-                    .fill(.black.opacity(0.55))
-            }
+            .cameraControlBackground(cornerRadius: 16)
             .animation(.easeInOut(duration: 0.25), value: exposureMode)
 
             Button(action: dismissExposureEditor) {
@@ -181,13 +184,10 @@ struct CameraCaptureView: View {
                     .font(.system(size: 13, weight: .semibold))
                     .foregroundStyle(.white)
                     .frame(width: 36, height: 36)
-                    .background {
-                        Circle()
-                            .fill(.black.opacity(0.55))
-                    }
                     .contentShape(Circle())
             }
             .buttonStyle(.plain)
+            .cameraControlCircleBackground()
             .accessibilityLabel("Close exposure control")
         }
         .padding(.trailing, 8)
@@ -215,10 +215,7 @@ struct CameraCaptureView: View {
                 }
             }
             .frame(width: 50)
-            .background {
-                RoundedRectangle(cornerRadius: 16)
-                    .fill(.black.opacity(0.55))
-            }
+            .cameraControlBackground(cornerRadius: 16)
             .animation(.easeInOut(duration: 0.25), value: focusMode)
 
             Button(action: dismissFocusEditor) {
@@ -226,13 +223,10 @@ struct CameraCaptureView: View {
                     .font(.system(size: 13, weight: .semibold))
                     .foregroundStyle(.white)
                     .frame(width: 36, height: 36)
-                    .background {
-                        Circle()
-                            .fill(.black.opacity(0.55))
-                    }
                     .contentShape(Circle())
             }
             .buttonStyle(.plain)
+            .cameraControlCircleBackground()
             .accessibilityLabel("Close focus control")
         }
         .padding(.trailing, 8)
@@ -274,10 +268,7 @@ struct CameraCaptureView: View {
                 }
             }
             .frame(width: whiteBalanceMode == .manual ? 108 : 50)
-            .background {
-                RoundedRectangle(cornerRadius: 16)
-                    .fill(.black.opacity(0.55))
-            }
+            .cameraControlBackground(cornerRadius: 16)
             .animation(.easeInOut(duration: 0.25), value: whiteBalanceMode)
 
             Button(action: dismissWhiteBalanceEditor) {
@@ -285,13 +276,10 @@ struct CameraCaptureView: View {
                     .font(.system(size: 13, weight: .semibold))
                     .foregroundStyle(.white)
                     .frame(width: 36, height: 36)
-                    .background {
-                        Circle()
-                            .fill(.black.opacity(0.55))
-                    }
                     .contentShape(Circle())
             }
             .buttonStyle(.plain)
+            .cameraControlCircleBackground()
             .accessibilityLabel("Close white balance control")
         }
         .padding(.trailing, 8)

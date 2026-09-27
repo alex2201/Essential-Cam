@@ -22,7 +22,7 @@ struct CameraFlashButton: View {
                 .frame(width: 44, height: 44)
                 .contentShape(Circle())
         }
-        .modifier(FloatingFlashButtonBackground())
+        .cameraControlCircleBackground()
         .accessibilityLabel("Flash")
         .accessibilityValue(flashAccessibilityValue)
     }
@@ -72,26 +72,6 @@ struct CameraFlashButton: View {
             "Auto"
         case .on:
             "On"
-        }
-    }
-}
-
-private struct FloatingFlashButtonBackground: ViewModifier {
-    func body(content: Content) -> some View {
-        if #available(iOS 26.0, *) {
-            content
-                .glassEffect(
-                    .regular
-                        .tint(.black.opacity(0.35))
-                        .interactive(),
-                    in: .circle
-                )
-        } else {
-            content
-                .background {
-                    Circle()
-                        .fill(.black.opacity(0.55))
-                }
         }
     }
 }

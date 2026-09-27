@@ -23,6 +23,7 @@ final class CameraViewModel {
     private(set) var selectedCamera: Camera?
     private(set) var canSwitchCameraPosition = false
     private(set) var isSwitchingCameraPosition = false
+    private(set) var availablePhotoOutputFormats: [PhotoOutputFormat] = []
 
     var preferredVirtualCamera: Camera? {
         availableVirtualCameras.max {
@@ -60,6 +61,7 @@ final class CameraViewModel {
             availableVirtualCameras = await cameraSession.availableVirtualCameras()
             selectedCamera = await cameraSession.selectedCamera()
             canSwitchCameraPosition = await cameraSession.canSwitchCameraPosition()
+            await refreshPhotoOutputFormats()
             await controls.synchronizeWithCamera()
             cameraStatus = .running
         } catch {
@@ -91,7 +93,8 @@ final class CameraViewModel {
             do {
                 let photo = try await useCase.execute(
                     flashMode: controls.settings.flashMode,
-                    aspectRatio: controls.settings.aspectRatio
+                    aspectRatio: controls.settings.aspectRatio,
+                    outputFormat: controls.settings.photoOutputFormat
                 )
                 capturedPhotoPreview = photo.previewImage
                 isPhotoPreviewPresented = photo.previewImage != nil
@@ -117,6 +120,7 @@ final class CameraViewModel {
                     preferredZoomFactor: preferredZoomFactor
                 )
                 selectedCamera = camera
+                await refreshPhotoOutputFormats()
             } catch {
                 print("Couldn't select camera: \(error.localizedDescription)")
             }
@@ -136,9 +140,19 @@ final class CameraViewModel {
                 availableVirtualCameras = await cameraSession.availableVirtualCameras()
                 selectedCamera = await cameraSession.selectedCamera()
                 await controls.synchronizeWithCamera(afterCameraSwitch: true)
+                await refreshPhotoOutputFormats()
             } catch {
                 print("Couldn't switch camera position: \(error.localizedDescription)")
             }
+        }
+    }
+
+
+    private func refreshPhotoOutputFormats() async {
+        availablePhotoOutputFormats = await cameraSession.availablePhotoOutputFormats()
+        if !availablePhotoOutputFormats.contains(controls.settings.photoOutputFormat),
+           let fallback = availablePhotoOutputFormats.first {
+            controls.setPhotoOutputFormat(fallback)
         }
     }
 }

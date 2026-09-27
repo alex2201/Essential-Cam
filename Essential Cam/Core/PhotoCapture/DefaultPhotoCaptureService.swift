@@ -8,6 +8,7 @@
 import AVFoundation
 import CoreImage
 import ImageIO
+import UniformTypeIdentifiers
 
 final class DefaultPhotoCaptureService: PhotoCaptureService {
     var output: AVCaptureOutput {
@@ -21,16 +22,60 @@ final class DefaultPhotoCaptureService: PhotoCaptureService {
         photoOutput.supportedFlashModes.contains(flashMode.avFoundationValue)
     }
 
+    func updateConfiguration(for device: AVCaptureDevice) {
+        photoOutput.isAppleProRAWEnabled = photoOutput.isAppleProRAWSupported
+    }
+
+    func availablePhotoOutputFormats() -> [PhotoOutputFormat] {
+        var formats: [PhotoOutputFormat] = []
+
+        if photoOutput.availablePhotoCodecTypes.contains(.hevc) {
+            formats.append(.heif)
+        }
+        if photoOutput.availablePhotoCodecTypes.contains(.jpeg) {
+            formats.append(.jpeg)
+        }
+
+        let destinationTypes = Set(
+            CGImageDestinationCopyTypeIdentifiers() as? [String] ?? []
+        )
+        if destinationTypes.contains(UTType.png.identifier) {
+            formats.append(.png)
+        }
+        if destinationTypes.contains(UTType.tiff.identifier) {
+            formats.append(.tiff)
+        }
+
+        let rawTypes = photoOutput.availableRawPhotoPixelFormatTypes
+        if rawTypes.contains(where: AVCapturePhotoOutput.isBayerRAWPixelFormat) {
+            formats.append(.raw)
+        }
+        if photoOutput.isAppleProRAWEnabled,
+           rawTypes.contains(where: AVCapturePhotoOutput.isAppleProRAWPixelFormat) {
+            formats.append(.appleProRAW)
+        }
+
+        return formats
+    }
+
     func capturePhoto(
         flashMode: CameraFlashMode,
-        aspectRatio: CameraAspectRatio
+        aspectRatio: CameraAspectRatio,
+        outputFormat: PhotoOutputFormat
     ) async throws -> Photo {
         defer { activeCaptureDelegate = nil }
 
         return try await withCheckedThrowingContinuation { continuation in
-            let photoSettings = createPhotoSettings(flashMode: flashMode)
+            guard let photoSettings = createPhotoSettings(
+                flashMode: flashMode,
+                outputFormat: outputFormat
+            ) else {
+                continuation.resume(throwing: PhotoCaptureError.photoProcessingFailed)
+                return
+            }
             let delegate = PhotoCaptureDelegate(
                 aspectRatio: aspectRatio,
+                outputFormat: outputFormat,
                 continuation: continuation
             )
 
@@ -39,13 +84,35 @@ final class DefaultPhotoCaptureService: PhotoCaptureService {
         }
     }
 
-    private func createPhotoSettings(flashMode: CameraFlashMode) -> AVCapturePhotoSettings {
-        // Create a new settings object to configure the photo capture.
-        var photoSettings = AVCapturePhotoSettings()
+    private func createPhotoSettings(
+        flashMode: CameraFlashMode,
+        outputFormat: PhotoOutputFormat
+    ) -> AVCapturePhotoSettings? {
+        let photoSettings: AVCapturePhotoSettings
 
-        // Capture photos in HEIF format when the device supports it.
-        if photoOutput.availablePhotoCodecTypes.contains(.hevc) {
-            photoSettings = AVCapturePhotoSettings(format: [AVVideoCodecKey: AVVideoCodecType.hevc])
+        switch outputFormat {
+        case .heif:
+            guard photoOutput.availablePhotoCodecTypes.contains(.hevc) else { return nil }
+            photoSettings = AVCapturePhotoSettings(
+                format: [AVVideoCodecKey: AVVideoCodecType.hevc]
+            )
+        case .jpeg:
+            guard photoOutput.availablePhotoCodecTypes.contains(.jpeg) else { return nil }
+            photoSettings = AVCapturePhotoSettings(
+                format: [AVVideoCodecKey: AVVideoCodecType.jpeg]
+            )
+        case .png, .tiff:
+            let codec: AVVideoCodecType = photoOutput.availablePhotoCodecTypes.contains(.hevc)
+                ? .hevc
+                : .jpeg
+            photoSettings = AVCapturePhotoSettings(format: [AVVideoCodecKey: codec])
+        case .raw, .appleProRAW:
+            let predicate = outputFormat == .appleProRAW
+                ? AVCapturePhotoOutput.isAppleProRAWPixelFormat
+                : AVCapturePhotoOutput.isBayerRAWPixelFormat
+            guard let rawType = photoOutput.availableRawPhotoPixelFormatTypes.first(where: predicate)
+            else { return nil }
+            photoSettings = AVCapturePhotoSettings(rawPixelFormatType: rawType)
         }
 
         /// Set the format of the preview image to capture. The `photoSettings` object returns the available
@@ -55,7 +122,9 @@ final class DefaultPhotoCaptureService: PhotoCaptureService {
         }
 
         photoSettings.maxPhotoDimensions = photoOutput.maxPhotoDimensions
-        photoSettings.flashMode = flashMode.avFoundationValue
+        if photoOutput.supportedFlashModes.contains(flashMode.avFoundationValue) {
+            photoSettings.flashMode = flashMode.avFoundationValue
+        }
 
         return photoSettings
     }
@@ -72,6 +141,7 @@ private class PhotoCaptureDelegate: NSObject, AVCapturePhotoCaptureDelegate {
 
     private let continuation: PhotoContinuation
     private let aspectRatio: CameraAspectRatio
+    private let outputFormat: PhotoOutputFormat
     private var photoData: Data?
     private var previewImage: CGImage?
     private var processingError: Error?
@@ -79,9 +149,11 @@ private class PhotoCaptureDelegate: NSObject, AVCapturePhotoCaptureDelegate {
     /// Creates a new delegate object with the checked continuation to call when processing is complete.
     init(
         aspectRatio: CameraAspectRatio,
+        outputFormat: PhotoOutputFormat,
         continuation: PhotoContinuation
     ) {
         self.aspectRatio = aspectRatio
+        self.outputFormat = outputFormat
         self.continuation = continuation
     }
 
@@ -96,7 +168,11 @@ private class PhotoCaptureDelegate: NSObject, AVCapturePhotoCaptureDelegate {
         }
 
         do {
-            photoData = try PhotoCropper.crop(capturedData, to: aspectRatio)
+            photoData = try PhotoCropper.process(
+                capturedData,
+                to: aspectRatio,
+                outputFormat: outputFormat
+            )
             previewImage = makeOrientedPreviewImage(from: photo)
                 .flatMap { PhotoCropper.crop($0, to: aspectRatio) }
         } catch {
@@ -144,7 +220,11 @@ private class PhotoCaptureDelegate: NSObject, AVCapturePhotoCaptureDelegate {
         }
 
         /// Create a photo object to save to the `MediaLibrary`.
-        let photo = Photo(data: photoData, previewImage: previewImage)
+        let photo = Photo(
+            data: photoData,
+            previewImage: previewImage,
+            uniformTypeIdentifier: outputFormat.uniformType.identifier
+        )
         // Resume the continuation by returning the captured photo.
         continuation.resume(returning: photo)
     }
@@ -153,13 +233,17 @@ private class PhotoCaptureDelegate: NSObject, AVCapturePhotoCaptureDelegate {
 private enum PhotoCropper {
     private static let context = CIContext()
 
-    static func crop(
+    static func process(
         _ data: Data,
-        to aspectRatio: CameraAspectRatio
+        to aspectRatio: CameraAspectRatio,
+        outputFormat: PhotoOutputFormat
     ) throws -> Data {
+        if outputFormat.isRAW {
+            return data
+        }
+
         guard
             let source = CGImageSourceCreateWithData(data as CFData, nil),
-            let sourceType = CGImageSourceGetType(source),
             let image = CIImage(
                 data: data,
                 options: [.applyOrientationProperty: true]
@@ -181,7 +265,7 @@ private enum PhotoCropper {
         let outputData = NSMutableData()
         guard let destination = CGImageDestinationCreateWithData(
             outputData,
-            sourceType,
+            outputFormat.uniformType.identifier as CFString,
             1,
             nil
         ) else {
@@ -246,5 +330,22 @@ private enum PhotoCropper {
             width: imageRect.width,
             height: height
         )
+    }
+}
+
+private extension PhotoOutputFormat {
+    var uniformType: UTType {
+        switch self {
+        case .heif:
+            .heic
+        case .jpeg:
+            .jpeg
+        case .png:
+            .png
+        case .tiff:
+            .tiff
+        case .raw, .appleProRAW:
+            .dng
+        }
     }
 }

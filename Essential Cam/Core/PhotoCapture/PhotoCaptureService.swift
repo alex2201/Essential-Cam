@@ -9,8 +9,10 @@ import AVFoundation
 
 protocol PhotoCaptureService: CameraCaptureComponent {
     func supportsFlashMode(_ flashMode: CameraFlashMode) -> Bool
+    func availablePhotoOutputFormats() -> [PhotoOutputFormat]
     func capturePhoto(
         flashMode: CameraFlashMode,
-        aspectRatio: CameraAspectRatio
+        aspectRatio: CameraAspectRatio,
+        outputFormat: PhotoOutputFormat
     ) async throws -> Photo
 }

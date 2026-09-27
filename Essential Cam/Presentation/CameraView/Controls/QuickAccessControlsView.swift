@@ -15,25 +15,10 @@ struct QuickAccessControlsView: View {
     let showWhiteBalanceEditor: () -> Void
 
     var body: some View {
-        Group {
-            if #available(iOS 26.0, *) {
-                controlsContent
-                    .glassEffect(
-                        .regular
-                            .tint(.black.opacity(0.35))
-                            .interactive(),
-                        in: .rect(cornerRadius: 12)
-                    )
-            } else {
-                controlsContent
-                    .background {
-                        RoundedRectangle(cornerRadius: 12)
-                            .fill(Color.black.opacity(0.55))
-                    }
-            }
-        }
-        .frame(width: 45)
-        .padding(.horizontal, 8)
+        controlsContent
+            .cameraControlBackground(cornerRadius: 12)
+            .frame(width: 45)
+            .padding(.horizontal, 8)
     }
 
     private var controlsContent: some View {
@@ -156,13 +141,10 @@ struct AspectRatioSelectionView: View {
                     .font(.system(size: 13, weight: .semibold))
                     .foregroundStyle(.white)
                     .frame(width: 36, height: 36)
-                    .background {
-                        Circle()
-                            .fill(.black.opacity(0.55))
-                    }
                     .contentShape(Circle())
             }
             .buttonStyle(.plain)
+            .cameraControlCircleBackground()
             .accessibilityLabel("Close aspect ratio selection")
         }
         .padding(.horizontal, 8)

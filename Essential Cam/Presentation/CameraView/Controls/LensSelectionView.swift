@@ -167,13 +167,10 @@ struct ZoomSelectionView: View {
                     .font(.system(size: 13, weight: .semibold))
                     .foregroundStyle(.white)
                     .frame(width: 36, height: 36)
-                    .background {
-                        Circle()
-                            .fill(.black.opacity(0.55))
-                    }
                     .contentShape(Circle())
             }
             .buttonStyle(.plain)
+            .cameraControlCircleBackground()
             .accessibilityLabel("Close zoom selection")
         }
         .padding(.horizontal, 8)
@@ -209,10 +206,7 @@ struct LensSelectionView: View {
             }
             .buttonStyle(.plain)
             .disabled(virtualCamera == nil)
-            .background {
-                Circle()
-                    .fill(.black.opacity(0.55))
-            }
+            .cameraControlCircleBackground()
             .accessibilityLabel("Virtual camera devices")
             .accessibilityValue(selectedCamera?.isVirtual == true ? "Selected" : "Not selected")
             .accessibilityAddTraits(selectedCamera?.isVirtual == true ? .isSelected : [])
@@ -263,13 +257,10 @@ struct LensSelectionView: View {
                     .font(.system(size: 13, weight: .semibold))
                     .foregroundStyle(.white)
                     .frame(width: 36, height: 36)
-                    .background {
-                        Circle()
-                            .fill(.black.opacity(0.55))
-                    }
                     .contentShape(Circle())
             }
             .buttonStyle(.plain)
+            .cameraControlCircleBackground()
             .accessibilityLabel("Close lens selection")
         }
         .padding(.horizontal, 8)
@@ -383,14 +374,59 @@ extension View {
         if #available(iOS 26.0, *) {
             glassEffect(
                 .regular
-                    .tint(.black.opacity(0.35))
+                    .tint(.black.opacity(0.52))
                     .interactive(),
                 in: .rect(cornerRadius: cornerRadius)
             )
+            .overlay {
+                RoundedRectangle(cornerRadius: cornerRadius)
+                    .strokeBorder(.white.opacity(0.16), lineWidth: 0.75)
+                    .allowsHitTesting(false)
+            }
         } else {
             background {
                 RoundedRectangle(cornerRadius: cornerRadius)
-                    .fill(Color.black.opacity(0.55))
+                    .fill(.ultraThinMaterial)
+                    .overlay {
+                        RoundedRectangle(cornerRadius: cornerRadius)
+                            .fill(.black.opacity(0.38))
+                    }
+            }
+            .overlay {
+                RoundedRectangle(cornerRadius: cornerRadius)
+                    .strokeBorder(.white.opacity(0.16), lineWidth: 0.75)
+                    .allowsHitTesting(false)
+            }
+        }
+    }
+
+    @ViewBuilder
+    func cameraControlCircleBackground() -> some View {
+        if #available(iOS 26.0, *) {
+            glassEffect(
+                .regular
+                    .tint(.black.opacity(0.52))
+                    .interactive(),
+                in: .circle
+            )
+            .overlay {
+                Circle()
+                    .strokeBorder(.white.opacity(0.16), lineWidth: 0.75)
+                    .allowsHitTesting(false)
+            }
+        } else {
+            background {
+                Circle()
+                    .fill(.ultraThinMaterial)
+                    .overlay {
+                        Circle()
+                            .fill(.black.opacity(0.38))
+                    }
+            }
+            .overlay {
+                Circle()
+                    .strokeBorder(.white.opacity(0.16), lineWidth: 0.75)
+                    .allowsHitTesting(false)
             }
         }
     }

@@ -1,0 +1,481 @@
+import SwiftUI
+
+struct CameraSettingsView: View {
+    @Environment(\.dismiss) private var dismiss
+    let viewModel: CameraViewModel
+
+    var body: some View {
+        NavigationStack {
+            List {
+                Section("Photo") {
+                    settingsLink("Aspect Ratio", value: viewModel.controls.settings.aspectRatio.displayName) {
+                        AspectRatioSettingsView(controls: viewModel.controls)
+                    }
+                    settingsLink("Exposure", value: viewModel.controls.settings.exposure.settingsDisplayName) {
+                        ExposureSettingsView(controls: viewModel.controls)
+                    }
+                    settingsLink("Focus", value: viewModel.controls.settings.focus.settingsDisplayName) {
+                        FocusSettingsView(controls: viewModel.controls)
+                    }
+                    settingsLink("White Balance", value: viewModel.controls.settings.whiteBalance.settingsDisplayName) {
+                        WhiteBalanceSettingsView(controls: viewModel.controls)
+                    }
+                    settingsLink("Image Format", value: viewModel.controls.settings.photoOutputFormat.displayName) {
+                        PhotoFormatSettingsView(viewModel: viewModel)
+                    }
+                }
+
+                Section("Camera") {
+                    settingsLink("Lens", value: viewModel.selectedCamera?.settingsDisplayName ?? "Unavailable") {
+                        LensSettingsView(viewModel: viewModel)
+                    }
+                    settingsLink("Zoom", value: viewModel.controls.settings.zoomFactor.settingsZoomName) {
+                        ZoomSettingsView(controls: viewModel.controls)
+                    }
+                    settingsLink("Camera", value: viewModel.selectedCamera?.position.settingsDisplayName ?? "Unavailable") {
+                        CameraPositionSettingsView(viewModel: viewModel)
+                    }
+                }
+            }
+            .navigationTitle("Settings")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Done") { dismiss() }
+                }
+            }
+        }
+    }
+
+    private func settingsLink<Destination: View>(
+        _ title: String,
+        value: String,
+        @ViewBuilder destination: () -> Destination
+    ) -> some View {
+        NavigationLink(destination: destination) {
+            HStack {
+                Text(title)
+                Spacer()
+                Text(value)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+            }
+        }
+    }
+}
+
+private struct AspectRatioSettingsView: View {
+    let controls: CameraControlsController
+
+    var body: some View {
+        SelectionList(
+            title: "Aspect Ratio",
+            values: CameraAspectRatio.allCases,
+            selected: controls.settings.aspectRatio,
+            label: \CameraAspectRatio.displayName,
+            select: controls.setAspectRatio
+        )
+    }
+}
+
+private struct ExposureSettingsView: View {
+    let controls: CameraControlsController
+
+    var body: some View {
+        Form {
+            Section("Mode") {
+                selectionButton("Automatic", selected: isAutomatic) {
+                    controls.useAutomaticExposure()
+                }
+                selectionButton("Manual", selected: !isAutomatic) {
+                    controls.useManualExposure()
+                }
+            }
+
+            if isAutomatic {
+                Section("Exposure Compensation") {
+                    Slider(
+                        value: Binding(
+                            get: { Double(controls.settings.exposure.exposureBias ?? 0) },
+                            set: { controls.setExposureBias(Float($0)) }
+                        ),
+                        in: controls.exposureBiasRange,
+                        step: 0.1
+                    )
+                    Text((controls.settings.exposure.exposureBias ?? 0).exposureBiasDisplayName + " EV")
+                        .foregroundStyle(.secondary)
+                }
+            } else {
+                Section("ISO") {
+                    Slider(value: iso, in: controls.exposureISORange)
+                    Text("ISO \(Int(iso.wrappedValue.rounded()))")
+                        .foregroundStyle(.secondary)
+                }
+                Section("Shutter Speed") {
+                    Slider(value: durationStops, in: durationStopsRange)
+                    Text(shutterSpeedName)
+                        .foregroundStyle(.secondary)
+                }
+            }
+        }
+        .navigationTitle("Exposure")
+        .navigationBarTitleDisplayMode(.inline)
+    }
+
+    private var isAutomatic: Bool {
+        if case .automatic = controls.settings.exposure { return true }
+        return false
+    }
+
+    private var iso: Binding<Double> {
+        Binding(
+            get: {
+                guard case let .manual(iso, _) = controls.settings.exposure else { return controls.exposureISORange.lowerBound }
+                return Double(iso)
+            },
+            set: { controls.setManualExposureISO(Float($0)) }
+        )
+    }
+
+    private var durationStops: Binding<Double> {
+        Binding(
+            get: {
+                guard case let .manual(_, duration) = controls.settings.exposure else { return durationStopsRange.lowerBound }
+                return log2(duration)
+            },
+            set: { controls.setManualExposureDuration(pow(2, $0)) }
+        )
+    }
+
+    private var durationStopsRange: ClosedRange<Double> {
+        log2(controls.exposureDurationRange.lowerBound)...log2(controls.exposureDurationRange.upperBound)
+    }
+
+    private var shutterSpeedName: String {
+        let duration = pow(2, durationStops.wrappedValue)
+        return duration >= 1
+            ? duration.formatted(.number.precision(.fractionLength(0...1))) + " s"
+            : "1/\(Int((1 / duration).rounded())) s"
+    }
+}
+
+private struct FocusSettingsView: View {
+    let controls: CameraControlsController
+
+    var body: some View {
+        Form {
+            Section("Mode") {
+                selectionButton("Automatic", selected: !isManual) {
+                    controls.useAutomaticFocus()
+                }
+                .disabled(!controls.supportsAutomaticFocus)
+                selectionButton("Manual", selected: isManual) {
+                    controls.useManualFocus()
+                }
+                .disabled(!controls.supportsManualFocus)
+            }
+
+            if isManual {
+                Section("Lens Position") {
+                    Slider(
+                        value: Binding(
+                            get: {
+                                guard case let .manual(position) = controls.settings.focus else { return 0.5 }
+                                return Double(position)
+                            },
+                            set: { controls.setManualFocusLensPosition(Float($0)) }
+                        ),
+                        in: 0...1,
+                        step: 0.01
+                    )
+                    HStack {
+                        Text("Near")
+                        Spacer()
+                        Text("Far")
+                    }
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                }
+            }
+        }
+        .navigationTitle("Focus")
+        .navigationBarTitleDisplayMode(.inline)
+    }
+
+    private var isManual: Bool {
+        if case .manual = controls.settings.focus { return true }
+        return false
+    }
+}
+
+private struct WhiteBalanceSettingsView: View {
+    let controls: CameraControlsController
+
+    var body: some View {
+        Form {
+            Section("Mode") {
+                selectionButton("Automatic", selected: !isManual) {
+                    controls.useAutomaticWhiteBalance()
+                }
+                .disabled(!controls.supportsAutomaticWhiteBalance)
+                selectionButton("Manual", selected: isManual) {
+                    controls.useManualWhiteBalance()
+                }
+                .disabled(!controls.supportsManualWhiteBalance)
+            }
+
+            if isManual {
+                Section("Temperature") {
+                    Slider(value: temperature, in: controls.whiteBalanceTemperatureRange, step: 100)
+                    Text("\(Int(temperature.wrappedValue.rounded())) K")
+                        .foregroundStyle(.secondary)
+                }
+                Section("Tint") {
+                    Slider(value: tint, in: controls.whiteBalanceTintRange, step: 1)
+                    Text("\(Int(tint.wrappedValue.rounded()))")
+                        .foregroundStyle(.secondary)
+                }
+            }
+        }
+        .navigationTitle("White Balance")
+        .navigationBarTitleDisplayMode(.inline)
+    }
+
+    private var isManual: Bool {
+        if case .manual = controls.settings.whiteBalance { return true }
+        return false
+    }
+
+    private var temperature: Binding<Double> {
+        Binding(
+            get: {
+                guard case let .manual(value, _) = controls.settings.whiteBalance else { return 5_500 }
+                return Double(value)
+            },
+            set: { controls.setManualWhiteBalanceTemperature(Float($0)) }
+        )
+    }
+
+    private var tint: Binding<Double> {
+        Binding(
+            get: {
+                guard case let .manual(_, value) = controls.settings.whiteBalance else { return 0 }
+                return Double(value)
+            },
+            set: { controls.setManualWhiteBalanceTint(Float($0)) }
+        )
+    }
+}
+
+private struct LensSettingsView: View {
+    let viewModel: CameraViewModel
+
+    private var cameras: [Camera] {
+        var result: [Camera] = []
+        if let virtual = viewModel.preferredVirtualCamera { result.append(virtual) }
+        result.append(contentsOf: viewModel.availableCameras.sorted {
+            ($0.displayZoomFactor ?? .greatestFiniteMagnitude) < ($1.displayZoomFactor ?? .greatestFiniteMagnitude)
+        })
+        return result
+    }
+
+    var body: some View {
+        List(cameras) { camera in
+            selectionButton(camera.settingsDisplayName, selected: camera.id == viewModel.selectedCamera?.id) {
+                viewModel.selectCamera(camera)
+            }
+        }
+        .navigationTitle("Lens")
+        .navigationBarTitleDisplayMode(.inline)
+    }
+}
+
+private struct ZoomSettingsView: View {
+    let controls: CameraControlsController
+
+    var body: some View {
+        Form {
+            Section {
+                Slider(
+                    value: Binding(
+                        get: { controls.settings.zoomFactor },
+                        set: controls.setZoomFactor
+                    ),
+                    in: controls.zoomFactorRange
+                )
+                Text(controls.settings.zoomFactor.settingsZoomName)
+                    .foregroundStyle(.secondary)
+            } footer: {
+                Text("Available range: \(controls.zoomFactorRange.lowerBound.settingsZoomName)–\(controls.zoomFactorRange.upperBound.settingsZoomName)")
+            }
+        }
+        .navigationTitle("Zoom")
+        .navigationBarTitleDisplayMode(.inline)
+    }
+}
+
+private struct CameraPositionSettingsView: View {
+    let viewModel: CameraViewModel
+
+    var body: some View {
+        List {
+            ForEach([Camera.Position.back, .front], id: \.settingsDisplayName) { position in
+                selectionButton(position.settingsDisplayName, selected: position == viewModel.selectedCamera?.position) {
+                    guard position != viewModel.selectedCamera?.position else { return }
+                    viewModel.toggleCameraPosition()
+                }
+                .disabled(!viewModel.canSwitchCameraPosition || viewModel.isSwitchingCameraPosition)
+            }
+        }
+        .navigationTitle("Camera")
+        .navigationBarTitleDisplayMode(.inline)
+    }
+}
+
+private struct PhotoFormatSettingsView: View {
+    let viewModel: CameraViewModel
+
+    var body: some View {
+        List {
+            Section {
+                ForEach(viewModel.availablePhotoOutputFormats, id: \.self) { format in
+                    selectionButton(format.displayName, selected: format == viewModel.controls.settings.photoOutputFormat) {
+                        viewModel.controls.setPhotoOutputFormat(format)
+                    }
+                }
+            } footer: {
+                Text(viewModel.controls.settings.photoOutputFormat.description)
+            }
+
+            if viewModel.controls.settings.photoOutputFormat.isRAW {
+                Section {
+                    Label("RAW files preserve the full sensor frame. The selected aspect ratio only affects the camera preview.", systemImage: "info.circle")
+                }
+            }
+        }
+        .navigationTitle("Image Format")
+        .navigationBarTitleDisplayMode(.inline)
+    }
+}
+
+private struct SelectionList<Value: Hashable>: View {
+    let title: String
+    let values: [Value]
+    let selected: Value
+    let label: KeyPath<Value, String>
+    let select: (Value) -> Void
+
+    var body: some View {
+        List(values, id: \.self) { value in
+            selectionButton(value[keyPath: label], selected: value == selected) {
+                select(value)
+            }
+        }
+        .navigationTitle(title)
+        .navigationBarTitleDisplayMode(.inline)
+    }
+}
+
+private func selectionButton(
+    _ title: String,
+    selected: Bool,
+    action: @escaping () -> Void
+) -> some View {
+    Button(action: action) {
+        HStack {
+            Text(title)
+                .foregroundStyle(.primary)
+            Spacer()
+            if selected {
+                Image(systemName: "checkmark")
+                    .foregroundStyle(.tint)
+            }
+        }
+        .contentShape(Rectangle())
+    }
+    .accessibilityAddTraits(selected ? .isSelected : [])
+}
+
+private extension ExposureSetting {
+    var settingsDisplayName: String {
+        switch self {
+        case let .automatic(bias): "Auto, \(bias.exposureBiasDisplayName) EV"
+        case .manual: "Manual"
+        }
+    }
+}
+
+private extension FocusSetting {
+    var settingsDisplayName: String {
+        if case .manual = self { return "Manual" }
+        return "Automatic"
+    }
+}
+
+private extension WhiteBalanceSetting {
+    var settingsDisplayName: String {
+        if case .manual = self { return "Manual" }
+        return "Automatic"
+    }
+}
+
+private extension Camera {
+    var settingsDisplayName: String {
+        if case .virtual = deviceKind { return "Automatic Lens Selection" }
+        if let focalLength = nominalFocalLengthIn35mmFilm {
+            return "\(lens.settingsDisplayName) (\(Int(focalLength.rounded())) mm)"
+        }
+        return lens.settingsDisplayName
+    }
+}
+
+private extension Camera.Lens {
+    var settingsDisplayName: String {
+        switch self {
+        case .ultraWideAngle: "Ultra Wide"
+        case .wideAngle: "Wide"
+        case .telephoto: "Telephoto"
+        case .unknown: "Camera Lens"
+        }
+    }
+}
+
+private extension Camera.Position {
+    var settingsDisplayName: String {
+        switch self {
+        case .front: "Front"
+        case .back: "Back"
+        }
+    }
+}
+
+private extension Double {
+    var settingsZoomName: String {
+        formatted(.number.precision(.fractionLength(0...1))) + "×"
+    }
+}
+
+extension PhotoOutputFormat {
+    var displayName: String {
+        switch self {
+        case .heif: "HEIF"
+        case .jpeg: "JPEG"
+        case .png: "PNG"
+        case .tiff: "TIFF"
+        case .raw: "RAW (DNG)"
+        case .appleProRAW: "Apple ProRAW"
+        }
+    }
+
+    var description: String {
+        switch self {
+        case .heif: "High-quality photos with efficient file sizes. Best for Apple devices."
+        case .jpeg: "The most widely compatible photo format."
+        case .png: "Lossless output with larger files."
+        case .tiff: "High-quality lossless output with very large files."
+        case .raw: "Minimally processed sensor data for maximum editing flexibility."
+        case .appleProRAW: "Sensor data combined with Apple computational photography for professional editing."
+        }
+    }
+
+}

@@ -10,12 +10,14 @@ import Photos
 struct DefaultPhotoLibrary: PhotoSaving {
     func save(_ photo: Photo) async throws {
         try await PHPhotoLibrary.shared().performChanges {
+            let options = PHAssetResourceCreationOptions()
+            options.uniformTypeIdentifier = photo.uniformTypeIdentifier
             PHAssetCreationRequest
                 .forAsset()
                 .addResource(
                     with: .photo,
                     data: photo.data,
-                    options: nil
+                    options: options
                 )
         }
     }

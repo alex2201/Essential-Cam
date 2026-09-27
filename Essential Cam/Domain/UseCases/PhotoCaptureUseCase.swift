@@ -8,7 +8,8 @@
 protocol PhotoCapturing: Sendable {
     func capturePhoto(
         flashMode: CameraFlashMode,
-        aspectRatio: CameraAspectRatio
+        aspectRatio: CameraAspectRatio,
+        outputFormat: PhotoOutputFormat
     ) async throws -> Photo
 }
 
@@ -23,11 +24,13 @@ struct PhotoCaptureUseCase {
     // Returns proxy photo to show quick preview to the user
     func execute(
         flashMode: CameraFlashMode,
-        aspectRatio: CameraAspectRatio
+        aspectRatio: CameraAspectRatio,
+        outputFormat: PhotoOutputFormat
     ) async throws -> Photo {
         let photo = try await photoCapture.capturePhoto(
             flashMode: flashMode,
-            aspectRatio: aspectRatio
+            aspectRatio: aspectRatio,
+            outputFormat: outputFormat
         )
         try await photoSaving.save(photo)
 

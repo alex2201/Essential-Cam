@@ -11,4 +11,5 @@ import Foundation
 struct Photo: Sendable {
     let data: Data
     let previewImage: CGImage?
+    let uniformTypeIdentifier: String
 }
