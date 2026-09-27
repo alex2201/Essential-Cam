@@ -26,134 +26,114 @@ struct CameraCaptureView: View {
                 geometry.size.height
             )
             let previewWidthToHeight = viewModel.controls.settings.aspectRatio.previewWidthToHeight
-            let cameraImageHeight = min(
-                geometry.size.width / previewWidthToHeight,
-                previewContainerHeight
-            )
-            let cameraImageTopInset = (previewContainerHeight - cameraImageHeight) / 2
+            ZStack {
+                VStack(spacing: .zero) {
+                    ZStack {
+                        Color.clear
 
-            VStack(spacing: .zero) {
-                ZStack {
-                    Color.clear
-
-                    CameraPreview(session: viewModel.captureSession)
-                        .aspectRatio(
-                            viewModel.controls.settings.aspectRatio.previewWidthToHeight,
-                            contentMode: .fit
-                        )
-                        .clipped()
-                        .frame(
-                            maxWidth: .infinity,
-                            maxHeight: .infinity,
-                            alignment: .center
-                        )
-                        .contentShape(Rectangle())
-                        .gesture(zoomGesture)
-                }
-                .frame(width: geometry.size.width, height: previewContainerHeight)
-                .overlay(alignment: .topTrailing) {
-                    CameraFlashButton(controls: viewModel.controls)
-                        .padding(.top, cameraImageTopInset + 8)
-                        .padding(.trailing, 8)
-                }
-                .overlay(alignment: .bottomTrailing) {
-                    CameraSettingsButton(action: showSettings)
-                        .padding(.bottom, cameraImageTopInset + 8)
-                        .padding(.trailing, 8)
-                }
-                .overlay(alignment: .bottom) {
-                    CaptureControlsView(
-                        captureAction: viewModel.captureAction,
-                        isCaptureDisabled: viewModel.isPerformingCaptureOperation
-                    )
-                    .padding(.bottom, cameraImageTopInset + 8)
-                }
-                .overlay(alignment: .trailing) {
-                    ZStack(alignment: .trailing) {
-                        if isAspectRatioSelectorPresented {
-                            AspectRatioSelectionView(
-                                selectedAspectRatio: viewModel.controls.settings.aspectRatio,
-                                selectAspectRatio: selectAspectRatio,
-                                dismiss: dismissAspectRatioSelector
+                        CameraPreview(session: viewModel.captureSession)
+                            .aspectRatio(previewWidthToHeight, contentMode: .fit)
+                            .clipped()
+                            .frame(
+                                maxWidth: .infinity,
+                                maxHeight: .infinity,
+                                alignment: .center
                             )
-                            .transition(controlTransition)
-                        } else if isExposureDialPresented {
-                            exposureEditor
-                                .transition(controlTransition)
-                        } else if isFocusDialPresented {
-                            focusEditor
-                                .transition(controlTransition)
-                        } else if isWhiteBalanceDialPresented {
-                            whiteBalanceEditor
-                                .transition(controlTransition)
-                        } else if isLensSelectorPresented {
-                            LensSelectionView(
-                                physicalCameras: viewModel.availableCameras,
-                                virtualCamera: viewModel.preferredVirtualCamera,
-                                selectedCamera: viewModel.selectedCamera,
-                                selectCamera: selectCamera,
-                                dismiss: dismissLensSelector
-                            )
-                            .transition(controlTransition)
-                        } else if isZoomSelectorPresented {
-                            ZoomSelectionView(
-                                zoomFactors: zoomSelectionFactors,
-                                selectedZoomFactor: viewModel.controls.settings.zoomFactor,
-                                selectZoomFactor: selectZoomFactor,
-                                dismiss: dismissZoomSelector
-                            )
-                            .transition(controlTransition)
-                        } else {
-                            VStack(spacing: 24) {
-                                QuickAccessControlsView(
-                                    controls: viewModel.controls,
-                                    showAspectRatioSelector: showAspectRatioSelector,
-                                    showExposureEditor: showExposureEditor,
-                                    showFocusEditor: showFocusEditor,
-                                    showWhiteBalanceEditor: showWhiteBalanceEditor
-                                )
-
-                                CameraSelectionControlsView(
-                                    camera: viewModel.selectedCamera,
-                                    zoomFactor: viewModel.controls.settings.zoomFactor,
-                                    canSelectZoom: !zoomSelectionFactors.isEmpty,
-                                    canSwitchPosition: viewModel.canSwitchCameraPosition,
-                                    isSwitchingPosition: viewModel.isSwitchingCameraPosition,
-                                    showLensSelector: showLensSelector,
-                                    showZoomSelector: showZoomSelector,
-                                    toggleCameraPosition: toggleCameraPosition
-                                )
-                            }
-                            .transition(controlTransition)
-                        }
+                            .contentShape(Rectangle())
+                            .gesture(zoomGesture)
                     }
-                    .animation(
-                        .easeInOut(duration: 0.25),
-                        value: isAspectRatioSelectorPresented
-                    )
-                    .animation(
-                        .easeInOut(duration: 0.25),
-                        value: isExposureDialPresented
-                    )
-                    .animation(
-                        .easeInOut(duration: 0.25),
-                        value: isFocusDialPresented
-                    )
-                    .animation(
-                        .easeInOut(duration: 0.25),
-                        value: isWhiteBalanceDialPresented
-                    )
-                    .animation(
-                        .easeInOut(duration: 0.25),
-                        value: isLensSelectorPresented
-                    )
-                    .animation(
-                        .easeInOut(duration: 0.25),
-                        value: isZoomSelectorPresented
-                    )
+                    .frame(width: geometry.size.width, height: previewContainerHeight)
                 }
+
+            }
+            .frame(width: geometry.size.width, height: geometry.size.height)
+            .overlay(alignment: .trailing) {
+                cameraControlsOverlay
+            }
+            .overlay(alignment: .topTrailing) {
+                CameraFlashButton(controls: viewModel.controls)
+                    .padding(8)
+            }
+            .overlay(alignment: .topLeading) {
+                CameraSettingsButton(action: showSettings)
+                    .padding(8)
+            }
+            .overlay(alignment: .bottom) {
+                CaptureControlsView(
+                    captureAction: viewModel.captureAction,
+                    isCaptureDisabled: viewModel.isPerformingCaptureOperation
+                )
+                .padding(.bottom, 42)
             }
         }
+    }
+
+    @ViewBuilder
+    private var cameraControlsOverlay: some View {
+        ZStack(alignment: .trailing) {
+            if isAspectRatioSelectorPresented {
+                AspectRatioSelectionView(
+                    selectedAspectRatio: viewModel.controls.settings.aspectRatio,
+                    selectAspectRatio: selectAspectRatio,
+                    dismiss: dismissAspectRatioSelector
+                )
+                .transition(controlTransition)
+            } else if isExposureDialPresented {
+                exposureEditor
+                    .transition(controlTransition)
+            } else if isFocusDialPresented {
+                focusEditor
+                    .transition(controlTransition)
+            } else if isWhiteBalanceDialPresented {
+                whiteBalanceEditor
+                    .transition(controlTransition)
+            } else if isLensSelectorPresented {
+                LensSelectionView(
+                    physicalCameras: viewModel.availableCameras,
+                    virtualCamera: viewModel.preferredVirtualCamera,
+                    selectedCamera: viewModel.selectedCamera,
+                    selectCamera: selectCamera,
+                    dismiss: dismissLensSelector
+                )
+                .transition(controlTransition)
+            } else if isZoomSelectorPresented {
+                ZoomSelectionView(
+                    zoomFactors: zoomSelectionFactors,
+                    selectedZoomFactor: viewModel.controls.settings.zoomFactor,
+                    selectZoomFactor: selectZoomFactor,
+                    dismiss: dismissZoomSelector
+                )
+                .transition(controlTransition)
+            } else {
+                VStack(spacing: 24) {
+                    QuickAccessControlsView(
+                        controls: viewModel.controls,
+                        showAspectRatioSelector: showAspectRatioSelector,
+                        showExposureEditor: showExposureEditor,
+                        showFocusEditor: showFocusEditor,
+                        showWhiteBalanceEditor: showWhiteBalanceEditor
+                    )
+
+                    CameraSelectionControlsView(
+                        camera: viewModel.selectedCamera,
+                        zoomFactor: viewModel.controls.settings.zoomFactor,
+                        canSelectZoom: !zoomSelectionFactors.isEmpty,
+                        canSwitchPosition: viewModel.canSwitchCameraPosition,
+                        isSwitchingPosition: viewModel.isSwitchingCameraPosition,
+                        showLensSelector: showLensSelector,
+                        showZoomSelector: showZoomSelector,
+                        toggleCameraPosition: toggleCameraPosition
+                    )
+                }
+                .transition(controlTransition)
+            }
+        }
+        .animation(.easeInOut(duration: 0.25), value: isAspectRatioSelectorPresented)
+        .animation(.easeInOut(duration: 0.25), value: isExposureDialPresented)
+        .animation(.easeInOut(duration: 0.25), value: isFocusDialPresented)
+        .animation(.easeInOut(duration: 0.25), value: isWhiteBalanceDialPresented)
+        .animation(.easeInOut(duration: 0.25), value: isLensSelectorPresented)
+        .animation(.easeInOut(duration: 0.25), value: isZoomSelectorPresented)
     }
 
     private var exposureEditor: some View {
