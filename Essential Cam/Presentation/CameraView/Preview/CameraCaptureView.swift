@@ -61,6 +61,13 @@ struct CameraCaptureView: View {
                         .padding(.bottom, cameraImageTopInset + 8)
                         .padding(.trailing, 8)
                 }
+                .overlay(alignment: .bottom) {
+                    CaptureControlsView(
+                        captureAction: viewModel.captureAction,
+                        isCaptureDisabled: viewModel.isPerformingCaptureOperation
+                    )
+                    .padding(.bottom, cameraImageTopInset + 8)
+                }
                 .overlay(alignment: .trailing) {
                     ZStack(alignment: .trailing) {
                         if isAspectRatioSelectorPresented {
@@ -145,15 +152,6 @@ struct CameraCaptureView: View {
                         value: isZoomSelectorPresented
                     )
                 }
-
-                CaptureControlsView(
-                    captureAction: viewModel.captureAction,
-                    isCaptureDisabled: viewModel.isPerformingCaptureOperation
-                )
-                .frame(
-                    width: geometry.size.width,
-                    height: geometry.size.height - previewContainerHeight
-                )
             }
         }
     }
