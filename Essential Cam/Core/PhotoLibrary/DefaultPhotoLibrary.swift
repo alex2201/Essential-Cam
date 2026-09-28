@@ -16,21 +16,30 @@ struct PhotoLibraryThumbnail: Identifiable, @unchecked Sendable {
 
 struct DefaultPhotoLibrary: PhotoSaving {
     func save(_ photo: Photo) async throws {
-        try await PHPhotoLibrary.shared().performChanges {
-            let options = PHAssetResourceCreationOptions()
-            options.uniformTypeIdentifier = photo.uniformTypeIdentifier
-            PHAssetCreationRequest
-                .forAsset()
-                .addResource(
-                    with: .photo,
-                    data: photo.data,
-                    options: options
-                )
+        let status = await PHPhotoLibrary.requestAuthorization(for: .addOnly)
+        guard status == .authorized || status == .limited else {
+            throw PhotoCaptureError.photoLibraryUnauthorized
+        }
+
+        do {
+            try await PHPhotoLibrary.shared().performChanges {
+                let options = PHAssetResourceCreationOptions()
+                options.uniformTypeIdentifier = photo.uniformTypeIdentifier
+                PHAssetCreationRequest
+                    .forAsset()
+                    .addResource(
+                        with: .photo,
+                        data: photo.data,
+                        options: options
+                    )
+            }
+        } catch {
+            throw PhotoCaptureError.photoLibrarySaveFailed
         }
     }
 
     func latestThumbnails(limit: Int = 3) async -> [PhotoLibraryThumbnail] {
-        let authorizationStatus = await PHPhotoLibrary.requestAuthorization(for: .readWrite)
+        let authorizationStatus = PHPhotoLibrary.authorizationStatus(for: .readWrite)
         guard authorizationStatus == .authorized || authorizationStatus == .limited else {
             return []
         }

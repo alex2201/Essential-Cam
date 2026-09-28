@@ -37,6 +37,7 @@ struct CameraZoomCapabilities: Sendable {
 
 actor CameraSession {
     nonisolated let captureSession: AVCaptureSession
+    nonisolated let events: AsyncStream<CameraSessionEvent>
 
     private let sessionQueue = DispatchSerialQueue(
         label: "com.alexanderlopez.Essential-Cam.capture-session"
@@ -44,9 +45,11 @@ actor CameraSession {
     private let deviceLookup: any CameraDeviceLookup
     private let photoCaptureService: any PhotoCaptureService
     private let videoCaptureService: any VideoCaptureService
+    private nonisolated let eventMonitor: CameraSessionEventMonitor
     
     private var activeVideoInput: AVCaptureDeviceInput?
     private var isSetUp = false
+    private var isCapturingPhoto = false
     private var selectedCameraPosition = Camera.Position.back
 
     nonisolated var unownedExecutor: UnownedSerialExecutor {
@@ -60,6 +63,9 @@ actor CameraSession {
         videoCaptureService: any VideoCaptureService = DefaultVideoCaptureService()
     ) {
         self.captureSession = captureSession
+        let eventMonitor = CameraSessionEventMonitor(session: captureSession)
+        self.eventMonitor = eventMonitor
+        events = eventMonitor.events
         self.deviceLookup = deviceLookup
         self.photoCaptureService = photoCaptureService
         self.videoCaptureService = videoCaptureService
@@ -77,6 +83,14 @@ actor CameraSession {
     func stop() {
         guard captureSession.isRunning else { return }
         captureSession.stopRunning()
+    }
+
+    func snapshot() -> CameraSessionSnapshot {
+        CameraSessionSnapshot(
+            isConfigured: isSetUp,
+            isRunning: captureSession.isRunning,
+            selectedCamera: selectedCamera()
+        )
     }
 
     func availableCameras() -> [Camera] {
@@ -159,6 +173,7 @@ actor CameraSession {
     }
 
     func apply(_ settings: CameraSettings) throws(CameraSessionError) {
+        guard !isCapturingPhoto else { throw .operationInProgress }
         guard isSetUp, let device = activeVideoInput?.device else {
             throw .setupFailed
         }
@@ -178,6 +193,7 @@ actor CameraSession {
     }
 
     func applyZoom(_ settings: CameraSettings) throws(CameraSessionError) {
+        guard !isCapturingPhoto else { throw .operationInProgress }
         guard isSetUp, let device = activeVideoInput?.device else {
             throw .setupFailed
         }
@@ -214,6 +230,7 @@ actor CameraSession {
     func applyAfterCameraSwitch(
         _ settings: CameraSettings
     ) throws(CameraSessionError) {
+        guard !isCapturingPhoto else { throw .operationInProgress }
         guard isSetUp, let device = activeVideoInput?.device else {
             throw .setupFailed
         }
@@ -233,6 +250,7 @@ actor CameraSession {
     }
 
     func selectCamera(id: Camera.ID) throws(CameraSessionError) {
+        guard !isCapturingPhoto else { throw .operationInProgress }
         guard isSetUp else {
             throw .setupFailed
         }
@@ -246,6 +264,7 @@ actor CameraSession {
     }
 
     func toggleCameraPosition() throws(CameraSessionError) {
+        guard !isCapturingPhoto else { throw .operationInProgress }
         guard isSetUp else {
             throw .setupFailed
         }
@@ -567,6 +586,12 @@ extension CameraSession: PhotoCapturing {
         outputFormat: PhotoOutputFormat,
         previewHandler: @escaping @Sendable (CGImage) -> Void
     ) async throws -> Photo {
+        guard !isCapturingPhoto else {
+            throw CameraSessionError.operationInProgress
+        }
+        isCapturingPhoto = true
+        defer { isCapturingPhoto = false }
+
         let supportedFlashMode: CameraFlashMode
 
         if photoCaptureService.supportsFlashMode(flashMode) {

@@ -10,4 +10,6 @@ import Foundation
 enum PhotoCaptureError: Error {
     case noPhotoData
     case photoProcessingFailed
+    case photoLibraryUnauthorized
+    case photoLibrarySaveFailed
 }

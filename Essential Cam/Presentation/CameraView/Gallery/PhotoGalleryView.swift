@@ -93,13 +93,22 @@ private struct PhotoGalleryCell: View {
 
 @MainActor
 @Observable
-final class PhotoGalleryViewModel {
+final class PhotoGalleryViewModel: NSObject, PHPhotoLibraryChangeObserver {
     private(set) var assetCount = 0
     private(set) var isLoading = true
     private(set) var hasPhotoLibraryAccess = true
 
     @ObservationIgnored private var assets: PHFetchResult<PHAsset>?
     @ObservationIgnored private let imageManager = PHCachingImageManager()
+
+    override init() {
+        super.init()
+        PHPhotoLibrary.shared().register(self)
+    }
+
+    deinit {
+        PHPhotoLibrary.shared().unregisterChangeObserver(self)
+    }
 
     var emptyStateDescription: String {
         hasPhotoLibraryAccess
@@ -115,6 +124,17 @@ final class PhotoGalleryViewModel {
             return
         }
 
+        loadAuthorizedAssets()
+    }
+
+    nonisolated func photoLibraryDidChange(_ changeInstance: PHChange) {
+        Task { @MainActor [weak self] in
+            guard let self, hasPhotoLibraryAccess else { return }
+            loadAuthorizedAssets()
+        }
+    }
+
+    private func loadAuthorizedAssets() {
         let fetchOptions = PHFetchOptions()
         fetchOptions.sortDescriptors = [
             NSSortDescriptor(key: #keyPath(PHAsset.creationDate), ascending: false)

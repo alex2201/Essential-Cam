@@ -6,15 +6,23 @@
 //
 
 import Foundation
+import OSLog
+
+private let cameraControlsLogger = Logger(
+    subsystem: "com.alexanderlopez.Essential-Cam",
+    category: "camera.configuration"
+)
 
 @MainActor
 @Observable
 final class CameraControlsController {
     // MARK: - Settings
 
-    private(set) var settings = CameraSettings.standard {
+    private(set) var settings: CameraSettings {
         didSet {
-            guard settings != oldValue, !isDeviceApplicationSuppressed else { return }
+            guard settings != oldValue else { return }
+            settingsStore.save(settings)
+            guard !isDeviceApplicationSuppressed else { return }
             applySettings()
         }
     }
@@ -43,6 +51,7 @@ final class CameraControlsController {
     private let cameraSession: CameraSession
     private let settingsThrottler: any Throttling<CameraSettings>
     private let zoomThrottler: any Throttling<CameraSettings>
+    private let settingsStore: CameraSettingsStore
 
     // MARK: - Cached Values
 
@@ -59,15 +68,20 @@ final class CameraControlsController {
     init(
         cameraSession: CameraSession,
         settingsThrottler: (any Throttling<CameraSettings>)? = nil,
-        zoomThrottler: (any Throttling<CameraSettings>)? = nil
+        zoomThrottler: (any Throttling<CameraSettings>)? = nil,
+        settingsStore: CameraSettingsStore = .init()
     ) {
         self.cameraSession = cameraSession
+        self.settingsStore = settingsStore
+        settings = settingsStore.load()
         self.settingsThrottler = settingsThrottler
             ?? AsyncThrottler(interval: .milliseconds(100)) { settings in
                 do {
                     try await cameraSession.apply(settings)
                 } catch {
-                    print("Couldn't apply camera settings: \(error.localizedDescription)")
+                    cameraControlsLogger.error(
+                        "Couldn't apply camera settings: \(error.localizedDescription, privacy: .public)"
+                    )
                 }
             }
         self.zoomThrottler = zoomThrottler
@@ -75,12 +89,19 @@ final class CameraControlsController {
                 do {
                     try await cameraSession.applyZoom(settings)
                 } catch {
-                    print("Couldn't apply camera zoom: \(error.localizedDescription)")
+                    cameraControlsLogger.error(
+                        "Couldn't apply camera zoom: \(error.localizedDescription, privacy: .public)"
+                    )
                 }
             }
     }
 
     // MARK: - Camera Synchronization
+
+    func cancelPendingChanges() {
+        settingsThrottler.cancel()
+        zoomThrottler.cancel()
+    }
 
     func synchronizeWithCamera(
         afterCameraSwitch: Bool = false,
@@ -97,7 +118,9 @@ final class CameraControlsController {
             do {
                 try await cameraSession.applyAfterCameraSwitch(settings)
             } catch {
-                print("Couldn't apply settings after camera switch: \(error.localizedDescription)")
+                cameraControlsLogger.error(
+                    "Couldn't apply settings after camera switch: \(error.localizedDescription, privacy: .public)"
+                )
             }
         } else {
             applySettingsImmediately()

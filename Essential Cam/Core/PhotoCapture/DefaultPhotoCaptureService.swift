@@ -8,7 +8,13 @@
 import AVFoundation
 import CoreImage
 import ImageIO
+import OSLog
 import UniformTypeIdentifiers
+
+private let photoCaptureLogger = Logger(
+    subsystem: "com.alexanderlopez.Essential-Cam",
+    category: "camera.capture"
+)
 
 final class DefaultPhotoCaptureService: PhotoCaptureService {
     var output: AVCaptureOutput {
@@ -212,7 +218,13 @@ private class PhotoCaptureDelegate: NSObject, AVCapturePhotoCaptureDelegate {
     }
 
     func photoOutput(_ output: AVCapturePhotoOutput, didFinishCapturingDeferredPhotoProxy deferredPhotoProxy: AVCaptureDeferredPhotoProxy?, error: (any Error)?) {
-        print("Received a deferred photo proxy")
+        if let error {
+            photoCaptureLogger.error(
+                "Deferred photo proxy failed: \(error.localizedDescription, privacy: .public)"
+            )
+        } else {
+            photoCaptureLogger.debug("Received a deferred photo proxy")
+        }
     }
 
     func photoOutput(_ output: AVCapturePhotoOutput, didFinishCaptureFor resolvedSettings: AVCaptureResolvedPhotoSettings, error: Error?) {

@@ -86,7 +86,7 @@ struct CameraCaptureView: View {
                 }
                 .buttonStyle(.plain)
                 .padding(.leading, 16)
-                .padding(.bottom, 48)
+                .padding(.bottom, 16)
                 .accessibilityLabel("Open Photo Library")
                 .accessibilityHint("Shows your photos in a grid")
             }
@@ -105,6 +105,7 @@ struct CameraCaptureView: View {
                     .allowsHitTesting(false)
                 }
             }
+            .allowsHitTesting(!viewModel.isCameraInteractionDisabled)
             .task(id: viewModel.capturedPhotoPreview?.id) {
                 guard let preview = viewModel.capturedPhotoPreview else { return }
 

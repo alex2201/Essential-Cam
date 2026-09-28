@@ -31,6 +31,38 @@ struct Essential_CamTests {
         #expect(decodedSettings == settings)
     }
 
+    @Test @MainActor func cameraSettingsStorePersistsAndRestores() throws {
+        let suiteName = "EssentialCamTests.\(UUID().uuidString)"
+        let defaults = try #require(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let store = CameraSettingsStore(defaults: defaults)
+        var settings = CameraSettings.standard
+        settings.aspectRatio = .square
+        settings.photoOutputFormat = .tiff
+        settings.zoomFactor = 2
+
+        store.save(settings)
+
+        #expect(store.load() == settings)
+    }
+
+    @Test func pendingPhotoSurvivesStoreRecreation() async throws {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let photo = Photo(
+            data: Data([0x01, 0x02, 0x03]),
+            previewImage: nil,
+            uniformTypeIdentifier: "public.jpeg"
+        )
+
+        try await PendingPhotoStore(directoryURL: directory).save(photo)
+        let restored = await PendingPhotoStore(directoryURL: directory).load()
+
+        #expect(restored?.data == photo.data)
+        #expect(restored?.uniformTypeIdentifier == photo.uniformTypeIdentifier)
+    }
+
     @Test func pngExportBakesOrientationIntoPixelsWithoutRotatingMetadata() throws {
         let sourceData = try makeJPEG(width: 4, height: 2, orientation: .right)
 

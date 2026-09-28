@@ -12,4 +12,5 @@ enum CameraSessionError: Error {
     case addInputFailed
     case addOutputFailed
     case configurationFailed
+    case operationInProgress
 }
