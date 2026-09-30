@@ -151,7 +151,14 @@ struct CameraView: View {
                 title: Text("Photos Access Required"),
                 message: Text("Allow Essential Cam to add photos in Settings, then retry."),
                 primaryButton: .default(Text("Open Settings"), action: openSettings),
-                secondaryButton: .cancel(Text("Keep Photo"))
+                secondaryButton: .destructive(Text("Discard"), action: viewModel.discardPendingPhoto)
+            )
+        case .pendingPhotoStorageFailed:
+            Alert(
+                title: Text("Photo Storage Error"),
+                message: Text("The captured photo couldn't be secured on this device. Retry or discard it before taking another photo."),
+                primaryButton: .default(Text("Retry"), action: viewModel.retryPendingPhotoSave),
+                secondaryButton: .destructive(Text("Discard"), action: viewModel.discardPendingPhoto)
             )
         case .cameraSwitchFailed:
             Alert(

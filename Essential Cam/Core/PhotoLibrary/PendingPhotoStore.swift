@@ -2,14 +2,22 @@ import CoreGraphics
 import Foundation
 import ImageIO
 
-actor PendingPhotoStore {
+protocol PendingPhotoStoring: Sendable {
+    func save(_ photo: Photo) async throws
+    func load() async throws -> Photo?
+    func discard() async throws
+}
+
+actor PendingPhotoStore: PendingPhotoStoring {
     private struct Metadata: Codable {
         let uniformTypeIdentifier: String
     }
 
     private let directoryURL: URL
+    private let fileManager: FileManager
 
     init(fileManager: FileManager = .default, directoryURL: URL? = nil) {
+        self.fileManager = fileManager
         if let directoryURL {
             self.directoryURL = directoryURL
             return
@@ -25,7 +33,7 @@ actor PendingPhotoStore {
     }
 
     func save(_ photo: Photo) throws {
-        try FileManager.default.createDirectory(
+        try fileManager.createDirectory(
             at: directoryURL,
             withIntermediateDirectories: true
         )
@@ -39,17 +47,19 @@ actor PendingPhotoStore {
         )
     }
 
-    func load() -> Photo? {
-        guard
-            let data = try? Data(contentsOf: dataURL),
-            let metadataData = try? Data(contentsOf: metadataURL),
-            let metadata = try? PropertyListDecoder().decode(
-                Metadata.self,
-                from: metadataData
-            )
-        else {
+    func load() throws -> Photo? {
+        let hasData = fileManager.fileExists(atPath: dataURL.path)
+        let hasMetadata = fileManager.fileExists(atPath: metadataURL.path)
+        guard hasData || hasMetadata else {
             return nil
         }
+
+        let data = try Data(contentsOf: dataURL)
+        let metadataData = try Data(contentsOf: metadataURL)
+        let metadata = try PropertyListDecoder().decode(
+            Metadata.self,
+            from: metadataData
+        )
 
         let preview = CGImageSourceCreateWithData(data as CFData, nil)
             .flatMap { CGImageSourceCreateThumbnailAtIndex(
@@ -69,9 +79,9 @@ actor PendingPhotoStore {
         )
     }
 
-    func discard() {
-        try? FileManager.default.removeItem(at: dataURL)
-        try? FileManager.default.removeItem(at: metadataURL)
+    func discard() throws {
+        guard fileManager.fileExists(atPath: directoryURL.path) else { return }
+        try fileManager.removeItem(at: directoryURL)
     }
 
     private var dataURL: URL {

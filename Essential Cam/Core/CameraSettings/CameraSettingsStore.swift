@@ -9,17 +9,22 @@ struct CameraSettingsStore {
     }
 
     func load() -> CameraSettings {
-        guard
-            let data = defaults.data(forKey: key),
-            let settings = try? JSONDecoder().decode(CameraSettings.self, from: data)
-        else {
+        guard let data = defaults.data(forKey: key) else {
             return .standard
         }
-        return settings
+        do {
+            return try JSONDecoder().decode(CameraSettings.self, from: data)
+        } catch {
+            // TODO: Track this error with the integrated logging service.
+            return .standard
+        }
     }
 
     func save(_ settings: CameraSettings) {
-        guard let data = try? JSONEncoder().encode(settings) else { return }
-        defaults.set(data, forKey: key)
+        do {
+            defaults.set(try JSONEncoder().encode(settings), forKey: key)
+        } catch {
+            // TODO: Track this error with the integrated logging service.
+        }
     }
 }

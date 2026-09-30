@@ -79,6 +79,7 @@ final class CameraControlsController {
                 do {
                     try await cameraSession.apply(settings)
                 } catch {
+                    // TODO: Track this error with the integrated logging service.
                     cameraControlsLogger.error(
                         "Couldn't apply camera settings: \(error.localizedDescription, privacy: .public)"
                     )
@@ -89,6 +90,7 @@ final class CameraControlsController {
                 do {
                     try await cameraSession.applyZoom(settings)
                 } catch {
+                    // TODO: Track this error with the integrated logging service.
                     cameraControlsLogger.error(
                         "Couldn't apply camera zoom: \(error.localizedDescription, privacy: .public)"
                     )
@@ -118,6 +120,7 @@ final class CameraControlsController {
             do {
                 try await cameraSession.applyAfterCameraSwitch(settings)
             } catch {
+                // TODO: Track this error with the integrated logging service.
                 cameraControlsLogger.error(
                     "Couldn't apply settings after camera switch: \(error.localizedDescription, privacy: .public)"
                 )

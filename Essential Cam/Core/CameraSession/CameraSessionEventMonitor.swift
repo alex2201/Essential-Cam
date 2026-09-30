@@ -1,12 +1,6 @@
 @preconcurrency import AVFoundation
 import Foundation
 
-struct CameraSessionSnapshot: Sendable {
-    let isConfigured: Bool
-    let isRunning: Bool
-    let selectedCamera: Camera?
-}
-
 /// Bridges AVFoundation notifications into a Sendable event stream. The
 /// capture-session actor remains the only owner allowed to mutate the session.
 final class CameraSessionEventMonitor: @unchecked Sendable {

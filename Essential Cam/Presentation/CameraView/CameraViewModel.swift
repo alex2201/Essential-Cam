@@ -24,8 +24,8 @@ final class CameraViewModel {
     private(set) var availableVirtualCameras: [Camera] = []
     private(set) var selectedCamera: Camera?
     private(set) var canSwitchCameraPosition = false
-    private(set) var isSwitchingCameraPosition = false
     private(set) var availablePhotoOutputFormats: [PhotoOutputFormat] = []
+    private(set) var hasPendingPhoto = false
 
     var preferredVirtualCamera: Camera? {
         availableVirtualCameras.max {
@@ -46,14 +46,11 @@ final class CameraViewModel {
     // MARK: - Dependencies
 
     private let cameraSession: CameraSession
-    private let photoLibrary: DefaultPhotoLibrary
-    private let pendingPhotoStore: PendingPhotoStore
-    private var sessionEventsTask: Task<Void, Never>?
-    private var foregroundHealthCheckTask: Task<Void, Never>?
-    private var pendingPhotoForSaving: Photo?
+    private let photoCoordinator: any PhotoCaptureCoordinating
+    private let photoLibraryReader: any PhotoLibraryReading
+    private let photoLibraryAuthorization: any PhotoLibraryAuthorizationProviding
+    private let lifecycle = CameraLifecycleController()
     private var didRestorePendingPhoto = false
-    private var isSceneActive = true
-    private var needsRecovery = false
     private let logger = Logger(
         subsystem: "com.alexanderlopez.Essential-Cam",
         category: "camera.lifecycle"
@@ -63,8 +60,12 @@ final class CameraViewModel {
         operation == .capturingPhoto
     }
 
+    var isSwitchingCameraPosition: Bool {
+        operation == .switchingCamera
+    }
+
     var isCameraInteractionDisabled: Bool {
-        operation != .none || cameraStatus != .running
+        operation != .none || cameraStatus != .running || hasPendingPhoto
     }
 
     // MARK: - Initialization
@@ -72,17 +73,24 @@ final class CameraViewModel {
     init(
         cameraSession: CameraSession = .init(),
         photoLibrary: DefaultPhotoLibrary = .init(),
-        pendingPhotoStore: PendingPhotoStore = .init()
+        pendingPhotoStore: PendingPhotoStore = .init(),
+        photoCoordinator: (any PhotoCaptureCoordinating)? = nil,
+        photoLibraryReader: (any PhotoLibraryReading)? = nil,
+        photoLibraryAuthorization: (any PhotoLibraryAuthorizationProviding)? = nil
     ) {
         self.cameraSession = cameraSession
-        self.photoLibrary = photoLibrary
-        self.pendingPhotoStore = pendingPhotoStore
+        self.photoCoordinator = photoCoordinator ?? PhotoCaptureCoordinator(
+            photoCapture: cameraSession,
+            photoSaving: photoLibrary,
+            pendingStore: pendingPhotoStore
+        )
+        self.photoLibraryReader = photoLibraryReader ?? photoLibrary
+        self.photoLibraryAuthorization = photoLibraryAuthorization ?? photoLibrary
         controls = CameraControlsController(cameraSession: cameraSession)
     }
 
     isolated deinit {
-        sessionEventsTask?.cancel()
-        foregroundHealthCheckTask?.cancel()
+        lifecycle.cancel()
     }
 
     // MARK: - Lifecycle
@@ -91,7 +99,9 @@ final class CameraViewModel {
         startMonitoringSessionEventsIfNeeded()
         await restorePendingPhotoIfNeeded()
         guard operation == .none else { return }
+        operation = .starting
         cameraStatus = .starting
+        defer { finishOperation() }
         do {
             try await cameraSession.start()
             availableCameras = await cameraSession.availableCameras()
@@ -102,6 +112,7 @@ final class CameraViewModel {
             await controls.synchronizeWithCamera()
             cameraStatus = .running
         } catch {
+            // TODO: Track this error with the integrated logging service.
             switch error {
             case .unauthorized:
                 cameraStatus = .unauthorized
@@ -114,15 +125,10 @@ final class CameraViewModel {
     }
 
     func handleScenePhase(isActive: Bool, isBackground: Bool) async {
-        isSceneActive = isActive
-        if isBackground {
-            needsRecovery = false
-            foregroundHealthCheckTask?.cancel()
+        guard lifecycle.updateScene(isActive: isActive, isBackground: isBackground) else {
             controls.cancelPendingChanges()
             return
         }
-
-        guard isActive else { return }
 
         switch cameraStatus {
         case .unauthorized, .failed, .idle:
@@ -134,6 +140,7 @@ final class CameraViewModel {
             scheduleForegroundHealthCheck()
         }
         await refreshRecentPhotoThumbnails()
+        await presentPendingPhotoActionsIfNeeded()
     }
 
     func retryCamera() {
@@ -149,23 +156,20 @@ final class CameraViewModel {
         // Photo capture requires camera hardware, so keep the shutter inert.
         return
 #else
-        guard operation == .none, cameraStatus == .running else { return }
+        guard operation == .none, cameraStatus == .running, !hasPendingPhoto else { return }
         operation = .capturingPhoto
 
         Task { [self] in
             defer { finishOperation() }
 
             do {
-                let photo = try await cameraSession.capturePhoto(
-                    flashMode: controls.settings.flashMode,
-                    aspectRatio: controls.settings.aspectRatio,
-                    outputFormat: controls.settings.photoOutputFormat,
-                    previewHandler: { _ in }
-                )
-                try await saveCapturedPhoto(photo)
-            } catch let error as PhotoCaptureError {
-                handlePhotoError(error)
+                let photo = try await photoCoordinator.capture(settings: controls.settings)
+                handleSavedPhoto(photo)
+            } catch let error as PhotoCaptureWorkflowError {
+                // TODO: Track this error with the integrated logging service.
+                await handlePhotoWorkflowError(error)
             } catch {
+                // TODO: Track this error with the integrated logging service.
                 activeAlert = .captureFailed
                 logger.error("Couldn't capture photo: \(error.localizedDescription, privacy: .public)")
             }
@@ -174,67 +178,94 @@ final class CameraViewModel {
     }
 
     func retryPendingPhotoSave() {
-        guard operation == .none, let photo = pendingPhotoForSaving else { return }
+        guard operation == .none, hasPendingPhoto else { return }
         activeAlert = nil
         operation = .capturingPhoto
 
         Task {
             defer { finishOperation() }
             do {
-                try await saveCapturedPhoto(photo)
-            } catch let error as PhotoCaptureError {
-                handlePhotoError(error)
+                let photo = try await photoCoordinator.retryPendingSave()
+                hasPendingPhoto = false
+                handleSavedPhoto(photo)
+            } catch let error as PhotoCaptureWorkflowError {
+                // TODO: Track this error with the integrated logging service.
+                await handlePhotoWorkflowError(error)
             } catch {
-                activeAlert = .photoSaveFailed
+                // TODO: Track this error with the integrated logging service.
+                activeAlert = .pendingPhotoStorageFailed
             }
         }
     }
 
     func discardPendingPhoto() {
-        pendingPhotoForSaving = nil
+        guard operation == .none, hasPendingPhoto else { return }
         activeAlert = nil
-        Task { await pendingPhotoStore.discard() }
-    }
-
-    private func saveCapturedPhoto(_ photo: Photo) async throws {
-        do {
-            try await pendingPhotoStore.save(photo)
-            pendingPhotoForSaving = photo
-            try await photoLibrary.save(photo)
-            pendingPhotoForSaving = nil
-            await pendingPhotoStore.discard()
-            if let previewImage = photo.previewImage {
-                capturedPhotoPreview = CapturedPhotoPreview(image: previewImage)
+        operation = .capturingPhoto
+        Task {
+            defer { finishOperation() }
+            do {
+                try await photoCoordinator.discardPendingPhoto()
+                hasPendingPhoto = false
+            } catch {
+                // TODO: Track this error with the integrated logging service.
+                hasPendingPhoto = true
+                activeAlert = .pendingPhotoStorageFailed
             }
-            await refreshRecentPhotoThumbnails()
-        } catch {
-            pendingPhotoForSaving = photo
-            throw error
         }
     }
 
     private func restorePendingPhotoIfNeeded() async {
         guard !didRestorePendingPhoto else { return }
         didRestorePendingPhoto = true
-        guard let photo = await pendingPhotoStore.load() else { return }
-        pendingPhotoForSaving = photo
-        activeAlert = .photoSaveFailed
+        do {
+            hasPendingPhoto = try await photoCoordinator.restorePendingPhoto() != nil
+            if hasPendingPhoto {
+                activeAlert = .photoSaveFailed
+            }
+        } catch {
+            // TODO: Track this error with the integrated logging service.
+            activeAlert = .pendingPhotoStorageFailed
+        }
     }
 
-    private func handlePhotoError(_ error: PhotoCaptureError) {
+    private func handlePhotoWorkflowError(_ error: PhotoCaptureWorkflowError) async {
+        hasPendingPhoto = await photoCoordinator.hasPendingPhoto()
         switch error {
         case .photoLibraryUnauthorized:
             activeAlert = .photoLibraryUnauthorized
         case .photoLibrarySaveFailed:
             activeAlert = .photoSaveFailed
-        case .noPhotoData, .photoProcessingFailed:
+        case .pendingStorageFailed:
+            activeAlert = .pendingPhotoStorageFailed
+        case .pendingPhotoAlreadyExists:
+            activeAlert = .photoSaveFailed
+        case .captureFailed:
             activeAlert = .captureFailed
         }
         logger.error("Photo operation failed: \(String(describing: error), privacy: .public)")
     }
 
+    private func handleSavedPhoto(_ photo: Photo) {
+        hasPendingPhoto = false
+        if let previewImage = photo.previewImage {
+            capturedPhotoPreview = CapturedPhotoPreview(image: previewImage)
+        }
+        Task { await refreshRecentPhotoThumbnails() }
+    }
+
+    private func presentPendingPhotoActionsIfNeeded() async {
+        guard hasPendingPhoto else { return }
+        switch await photoLibraryAuthorization.addAuthorizationStatus() {
+        case .authorized:
+            activeAlert = .photoSaveFailed
+        case .denied, .notDetermined:
+            activeAlert = .photoLibraryUnauthorized
+        }
+    }
+
     func refreshRecentPhotoThumbnails() async {
-        recentPhotoThumbnails = await DefaultPhotoLibrary().latestThumbnails()
+        recentPhotoThumbnails = await photoLibraryReader.latestThumbnails(limit: 3)
     }
 
     // MARK: - Camera Selection
@@ -258,6 +289,7 @@ final class CameraViewModel {
                 selectedCamera = camera
                 await refreshPhotoOutputFormats()
             } catch {
+                // TODO: Track this error with the integrated logging service.
                 activeAlert = .cameraSwitchFailed
                 logger.error("Couldn't select camera: \(error.localizedDescription, privacy: .public)")
             }
@@ -265,14 +297,12 @@ final class CameraViewModel {
     }
 
     func toggleCameraPosition() {
-        guard canSwitchCameraPosition, !isSwitchingCameraPosition,
+        guard canSwitchCameraPosition,
               operation == .none, cameraStatus == .running else { return }
-        isSwitchingCameraPosition = true
         operation = .switchingCamera
 
         Task {
             defer {
-                isSwitchingCameraPosition = false
                 finishOperation()
             }
 
@@ -284,6 +314,7 @@ final class CameraViewModel {
                 await controls.synchronizeWithCamera(afterCameraSwitch: true)
                 await refreshPhotoOutputFormats()
             } catch {
+                // TODO: Track this error with the integrated logging service.
                 activeAlert = .cameraSwitchFailed
                 logger.error("Couldn't switch camera position: \(error.localizedDescription, privacy: .public)")
             }
@@ -291,12 +322,8 @@ final class CameraViewModel {
     }
 
     private func startMonitoringSessionEventsIfNeeded() {
-        guard sessionEventsTask == nil else { return }
-        sessionEventsTask = Task { [weak self, events = cameraSession.events] in
-            for await event in events {
-                guard !Task.isCancelled else { return }
-                await self?.handleSessionEvent(event)
-            }
+        lifecycle.startMonitoring(events: cameraSession.events) { [weak self] event in
+            await self?.handleSessionEvent(event)
         }
     }
 
@@ -305,7 +332,7 @@ final class CameraViewModel {
         case let .interrupted(reason):
             // Background transitions already hide the app. Avoid replacing the
             // preview with an interruption message that lingers on foreground.
-            if isSceneActive || reason != .appInactive {
+            if lifecycle.isSceneActive || reason != .appInactive {
                 cameraStatus = .interrupted(reason)
             }
             controls.cancelPendingChanges()
@@ -321,19 +348,17 @@ final class CameraViewModel {
     private func requestRecovery(
         failure: CameraFailure = .cameraUnavailable
     ) async {
-        guard isSceneActive else { return }
-        guard operation == .none else {
-            needsRecovery = true
-            return
-        }
+        guard let failure = lifecycle.recoveryToRun(
+            for: failure,
+            operationInProgress: operation != .none
+        ) else { return }
         await recoverCamera(failure: failure)
     }
 
     private func finishOperation() {
         operation = .none
-        guard needsRecovery, isSceneActive else { return }
-        needsRecovery = false
-        Task { await recoverCamera() }
+        guard let failure = lifecycle.takePendingRecovery() else { return }
+        Task { await recoverCamera(failure: failure) }
     }
 
     private func reconcileCameraState() async {
@@ -346,11 +371,8 @@ final class CameraViewModel {
     }
 
     private func scheduleForegroundHealthCheck() {
-        foregroundHealthCheckTask?.cancel()
-        foregroundHealthCheckTask = Task { [weak self] in
-            try? await Task.sleep(for: .milliseconds(750))
-            guard !Task.isCancelled, let self, isSceneActive else { return }
-            await reconcileCameraState()
+        lifecycle.scheduleHealthCheck { [weak self] in
+            await self?.reconcileCameraState()
         }
     }
 
@@ -358,7 +380,7 @@ final class CameraViewModel {
         guard operation == .none else { return }
         operation = .recovering
         cameraStatus = .recovering
-        defer { operation = .none }
+        defer { finishOperation() }
 
         do {
             try await cameraSession.start()
@@ -370,6 +392,7 @@ final class CameraViewModel {
             await controls.synchronizeWithCamera()
             cameraStatus = .running
         } catch let error {
+            // TODO: Track this error with the integrated logging service.
             switch error {
             case .unauthorized:
                 cameraStatus = .unauthorized
@@ -396,6 +419,7 @@ enum CameraAlert: String, Identifiable {
     case captureFailed
     case photoSaveFailed
     case photoLibraryUnauthorized
+    case pendingPhotoStorageFailed
     case cameraSwitchFailed
     case cameraRecoveryFailed
 

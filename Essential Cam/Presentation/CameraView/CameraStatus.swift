@@ -19,14 +19,6 @@ enum CameraStatus: Equatable {
     case failed(CameraFailure)
 }
 
-enum CameraInterruption: Equatable, Sendable {
-    case appInactive
-    case audioOrVideoInUse
-    case multipleForegroundApps
-    case systemPressure
-    case unknown
-}
-
 enum CameraFailure: Equatable, Sendable {
     case configuration
     case cameraUnavailable
@@ -39,19 +31,8 @@ enum CameraFailure: Equatable, Sendable {
 
 enum CameraOperation: Equatable {
     case none
+    case starting
     case capturingPhoto
     case switchingCamera
-    case reconfiguring
     case recovering
-}
-
-enum CameraSessionEvent: Sendable {
-    case interrupted(CameraInterruption)
-    case interruptionEnded
-    case runtimeError(CameraRuntimeFailure)
-}
-
-enum CameraRuntimeFailure: Sendable {
-    case mediaServicesWereReset
-    case other
 }

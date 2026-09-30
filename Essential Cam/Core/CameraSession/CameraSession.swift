@@ -181,6 +181,7 @@ actor CameraSession {
         do {
             try device.lockForConfiguration()
         } catch {
+            // TODO: Track this error with the integrated logging service.
             throw .configurationFailed
         }
 
@@ -201,6 +202,7 @@ actor CameraSession {
         do {
             try device.lockForConfiguration()
         } catch {
+            // TODO: Track this error with the integrated logging service.
             throw .configurationFailed
         }
 
@@ -238,6 +240,7 @@ actor CameraSession {
         do {
             try device.lockForConfiguration()
         } catch {
+            // TODO: Track this error with the integrated logging service.
             throw .configurationFailed
         }
 
@@ -330,6 +333,7 @@ actor CameraSession {
         do {
             newInput = try AVCaptureDeviceInput(device: device)
         } catch {
+            // TODO: Track this error with the integrated logging service.
             throw .addInputFailed
         }
 
@@ -540,6 +544,7 @@ actor CameraSession {
         do {
             input = try AVCaptureDeviceInput(device: device)
         } catch {
+            // TODO: Track this error with the integrated logging service.
             throw .addInputFailed
         }
 

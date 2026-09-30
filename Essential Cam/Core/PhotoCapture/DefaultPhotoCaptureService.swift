@@ -191,6 +191,7 @@ private class PhotoCaptureDelegate: NSObject, AVCapturePhotoCaptureDelegate {
                 outputFormat: outputFormat
             )
         } catch {
+            // TODO: Track this error with the integrated logging service.
             processingError = error
         }
     }
@@ -219,6 +220,7 @@ private class PhotoCaptureDelegate: NSObject, AVCapturePhotoCaptureDelegate {
 
     func photoOutput(_ output: AVCapturePhotoOutput, didFinishCapturingDeferredPhotoProxy deferredPhotoProxy: AVCaptureDeferredPhotoProxy?, error: (any Error)?) {
         if let error {
+            // TODO: Track this error with the integrated logging service.
             photoCaptureLogger.error(
                 "Deferred photo proxy failed: \(error.localizedDescription, privacy: .public)"
             )
@@ -230,12 +232,14 @@ private class PhotoCaptureDelegate: NSObject, AVCapturePhotoCaptureDelegate {
     func photoOutput(_ output: AVCapturePhotoOutput, didFinishCaptureFor resolvedSettings: AVCaptureResolvedPhotoSettings, error: Error?) {
         // If an error occurs, resume the continuation by throwing an error, and return.
         if let error = error ?? processingError {
+            // TODO: Track this error with the integrated logging service.
             continuation.resume(throwing: error)
             return
         }
 
         // If the app captures no photo data, resume the continuation by throwing an error, and return.
         guard let photoData else {
+            // TODO: Track this error with the integrated logging service.
             continuation.resume(throwing: PhotoCaptureError.noPhotoData)
             return
         }

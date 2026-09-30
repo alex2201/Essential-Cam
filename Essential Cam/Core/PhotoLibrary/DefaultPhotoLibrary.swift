@@ -14,7 +14,7 @@ struct PhotoLibraryThumbnail: Identifiable, @unchecked Sendable {
     let aspectRatio: CGFloat
 }
 
-struct DefaultPhotoLibrary: PhotoSaving {
+struct DefaultPhotoLibrary: PhotoSaving, PhotoLibraryReading, PhotoLibraryAuthorizationProviding {
     func save(_ photo: Photo) async throws {
         let status = await PHPhotoLibrary.requestAuthorization(for: .addOnly)
         guard status == .authorized || status == .limited else {
@@ -34,7 +34,21 @@ struct DefaultPhotoLibrary: PhotoSaving {
                     )
             }
         } catch {
+            // TODO: Track this error with the integrated logging service.
             throw PhotoCaptureError.photoLibrarySaveFailed
+        }
+    }
+
+    func addAuthorizationStatus() async -> PhotoLibraryAuthorizationStatus {
+        switch PHPhotoLibrary.authorizationStatus(for: .addOnly) {
+        case .authorized, .limited:
+            return .authorized
+        case .notDetermined:
+            return .notDetermined
+        case .denied, .restricted:
+            return .denied
+        @unknown default:
+            return .denied
         }
     }
 
