@@ -98,6 +98,63 @@ struct Essential_CamTests {
         #expect(decodedSettings == presetSettings)
     }
 
+    @Test func cameraPresetRepositoryPersistsAndRestoresPresets() async throws {
+        let fileURL = temporaryFileURL(named: "presets.json")
+        defer { try? FileManager.default.removeItem(at: fileURL.deletingLastPathComponent()) }
+        let firstPreset = CameraPreset(
+            name: "Street",
+            settings: CameraPresetSettings(
+                exposure: .manual(iso: 200, durationInSeconds: 1.0 / 250.0),
+                aspectRatio: .fourByThree
+            )
+        )
+        let secondPreset = CameraPreset(
+            name: "Night",
+            settings: CameraPresetSettings(
+                exposure: .manual(iso: 800, durationInSeconds: 1.0 / 30.0),
+                flashMode: .off
+            )
+        )
+        let repository = JSONCameraPresetRepository(fileURL: fileURL)
+
+        try await repository.save(firstPreset)
+        try await repository.save(secondPreset)
+
+        let restoredRepository = JSONCameraPresetRepository(fileURL: fileURL)
+        #expect(try await restoredRepository.presets() == [firstPreset, secondPreset])
+    }
+
+    @Test func cameraPresetRepositoryUpdatesWithoutChangingOrder() async throws {
+        let fileURL = temporaryFileURL(named: "presets.json")
+        defer { try? FileManager.default.removeItem(at: fileURL.deletingLastPathComponent()) }
+        let firstPreset = CameraPreset(name: "First", settings: .init())
+        let secondPreset = CameraPreset(name: "Second", settings: .init())
+        let repository = JSONCameraPresetRepository(fileURL: fileURL)
+        try await repository.save(firstPreset)
+        try await repository.save(secondPreset)
+
+        var updatedFirstPreset = firstPreset
+        updatedFirstPreset.name = "Updated"
+        try await repository.save(updatedFirstPreset)
+
+        #expect(try await repository.presets() == [updatedFirstPreset, secondPreset])
+    }
+
+    @Test func cameraPresetRepositoryDeletesPersistedPreset() async throws {
+        let fileURL = temporaryFileURL(named: "presets.json")
+        defer { try? FileManager.default.removeItem(at: fileURL.deletingLastPathComponent()) }
+        let firstPreset = CameraPreset(name: "First", settings: .init())
+        let secondPreset = CameraPreset(name: "Second", settings: .init())
+        let repository = JSONCameraPresetRepository(fileURL: fileURL)
+        try await repository.save(firstPreset)
+        try await repository.save(secondPreset)
+
+        try await repository.delete(id: firstPreset.id)
+
+        let restoredRepository = JSONCameraPresetRepository(fileURL: fileURL)
+        #expect(try await restoredRepository.presets() == [secondPreset])
+    }
+
     @Test @MainActor func cameraPresetStoreSavesUpdatesDeletesAndReordersPresets() {
         let first = CameraPreset(name: "First", settings: .init())
         let second = CameraPreset(name: "Second", settings: .init())
@@ -132,6 +189,26 @@ struct Essential_CamTests {
 
         store.delete(id: first.id)
         #expect(store.selectedPresetID == nil)
+    }
+
+    @Test @MainActor func cameraPresetStoreLoadsAndPersistsMutations() async throws {
+        let fileURL = temporaryFileURL(named: "presets.json")
+        defer { try? FileManager.default.removeItem(at: fileURL.deletingLastPathComponent()) }
+        let repository = JSONCameraPresetRepository(fileURL: fileURL)
+        let firstPreset = CameraPreset(name: "First", settings: .init())
+        let secondPreset = CameraPreset(name: "Second", settings: .init())
+        try await repository.replaceAll(with: [firstPreset])
+        let store = CameraPresetStore(repository: repository)
+
+        await store.load()
+        store.save(secondPreset)
+        store.move(fromOffsets: IndexSet(integer: 1), toOffset: 0)
+        store.delete(id: firstPreset.id)
+        await store.waitForPendingPersistence()
+
+        let restoredRepository = JSONCameraPresetRepository(fileURL: fileURL)
+        #expect(store.persistenceErrorDescription == nil)
+        #expect(try await restoredRepository.presets() == [secondPreset])
     }
 
 #if DEBUG
@@ -329,6 +406,12 @@ struct Essential_CamTests {
         #expect(CGImageDestinationFinalize(destination))
 
         return data as Data
+    }
+
+    private func temporaryFileURL(named name: String) -> URL {
+        FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+            .appendingPathComponent(name)
     }
 
     private func makePhoto(_ bytes: [UInt8]) -> Photo {
