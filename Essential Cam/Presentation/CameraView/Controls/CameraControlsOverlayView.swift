@@ -14,6 +14,13 @@ struct CameraControlsOverlayView: View {
 
     var body: some View {
         ZStack(alignment: .trailing) {
+            if presentedControl != nil {
+                Color.clear
+                    .contentShape(Rectangle())
+                    .onTapGesture(perform: dismissPresentedControl)
+                    .accessibilityHidden(true)
+            }
+
             switch presentedControl {
             case .aspectRatio:
                 AspectRatioSelectionView(
@@ -62,6 +69,7 @@ struct CameraControlsOverlayView: View {
                     .transition(controlTransition)
             }
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .trailing)
         .animation(.easeInOut(duration: 0.25), value: presentedControl)
     }
 
