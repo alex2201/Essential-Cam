@@ -21,7 +21,6 @@ final class CameraControlsController {
     private(set) var settings: CameraSettings {
         didSet {
             guard settings != oldValue else { return }
-            settingsStore.save(settings)
             guard !isDeviceApplicationSuppressed else { return }
             applySettings()
         }
@@ -51,7 +50,6 @@ final class CameraControlsController {
     private let cameraSession: CameraSession
     private let settingsThrottler: any Throttling<CameraSettings>
     private let zoomThrottler: any Throttling<CameraSettings>
-    private let settingsStore: CameraSettingsStore
 
     // MARK: - Cached Values
 
@@ -68,12 +66,10 @@ final class CameraControlsController {
     init(
         cameraSession: CameraSession,
         settingsThrottler: (any Throttling<CameraSettings>)? = nil,
-        zoomThrottler: (any Throttling<CameraSettings>)? = nil,
-        settingsStore: CameraSettingsStore = .init()
+        zoomThrottler: (any Throttling<CameraSettings>)? = nil
     ) {
         self.cameraSession = cameraSession
-        self.settingsStore = settingsStore
-        settings = settingsStore.load()
+        settings = .standard
         self.settingsThrottler = settingsThrottler
             ?? AsyncThrottler(interval: .milliseconds(100)) { settings in
                 do {
@@ -148,6 +144,37 @@ final class CameraControlsController {
         isDeviceApplicationSuppressed = true
         settings.photoOutputFormat = outputFormat
         isDeviceApplicationSuppressed = false
+    }
+
+    func applyPreset(_ preset: CameraPresetSettings) {
+        let defaults = CameraSettings.standard
+        var updatedSettings = settings
+        updatedSettings.exposure = preset.exposure ?? defaults.exposure
+        updatedSettings.focus = preset.focus ?? defaults.focus
+        updatedSettings.whiteBalance = preset.whiteBalance ?? defaults.whiteBalance
+        updatedSettings.aspectRatio = preset.aspectRatio ?? defaults.aspectRatio
+        updatedSettings.flashMode = preset.flashMode ?? defaults.flashMode
+
+        isDeviceApplicationSuppressed = true
+        settings = updatedSettings
+        cachePresetControlValues(from: updatedSettings)
+        isDeviceApplicationSuppressed = false
+        applySettingsImmediately()
+    }
+
+    func applyUnselectedSettings(_ unselectedSettings: CameraSettings) {
+        var updatedSettings = settings
+        updatedSettings.exposure = unselectedSettings.exposure
+        updatedSettings.focus = unselectedSettings.focus
+        updatedSettings.whiteBalance = unselectedSettings.whiteBalance
+        updatedSettings.aspectRatio = unselectedSettings.aspectRatio
+        updatedSettings.flashMode = unselectedSettings.flashMode
+
+        isDeviceApplicationSuppressed = true
+        settings = updatedSettings
+        cachePresetControlValues(from: updatedSettings)
+        isDeviceApplicationSuppressed = false
+        applySettingsImmediately()
     }
 
     // MARK: - Zoom
@@ -271,6 +298,25 @@ final class CameraControlsController {
 
     private func applySettingsImmediately() {
         settingsThrottler.submitImmediately(settings)
+    }
+
+    private func cachePresetControlValues(from settings: CameraSettings) {
+        switch settings.exposure {
+        case let .automatic(exposureBias):
+            automaticExposureBias = exposureBias
+        case let .manual(iso, durationInSeconds):
+            manualExposureISO = iso
+            manualExposureDurationInSeconds = durationInSeconds
+        }
+
+        if case let .manual(lensPosition) = settings.focus {
+            manualFocusLensPosition = lensPosition
+        }
+
+        if case let .manual(temperature, tint) = settings.whiteBalance {
+            manualWhiteBalanceTemperature = temperature
+            manualWhiteBalanceTint = tint
+        }
     }
 
     // MARK: - Capability Updates

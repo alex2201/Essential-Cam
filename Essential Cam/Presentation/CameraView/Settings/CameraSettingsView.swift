@@ -2,6 +2,7 @@ import SwiftUI
 
 struct CameraSettingsView: View {
     @Environment(\.dismiss) private var dismiss
+    @Environment(CameraPresetStore.self) private var presetStore
     let viewModel: CameraViewModel
 
     var body: some View {
@@ -22,6 +23,18 @@ struct CameraSettingsView: View {
                     }
                     settingsLink("Image Format", value: viewModel.controls.settings.photoOutputFormat.displayName) {
                         PhotoFormatSettingsView(viewModel: viewModel)
+                    }
+                }
+
+                Section("Presets") {
+                    settingsLink(
+                        "Camera Presets",
+                        value: presetStore.presets.count.formatted()
+                    ) {
+                        CameraPresetsView(
+                            store: presetStore,
+                            controls: viewModel.controls
+                        )
                     }
                 }
 

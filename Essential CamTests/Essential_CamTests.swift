@@ -46,6 +46,113 @@ struct Essential_CamTests {
         #expect(store.load() == settings)
     }
 
+    @Test func cameraPresetSettingsCaptureNonDefaultPhotoSettings() {
+        var settings = CameraSettings.standard
+        settings.exposure = .manual(iso: 400, durationInSeconds: 1.0 / 125.0)
+        settings.focus = .manual(lensPosition: 0.75)
+        settings.whiteBalance = .manual(temperature: 5_600, tint: 10)
+        settings.aspectRatio = .square
+        settings.flashMode = .automatic
+        settings.zoomFactor = 2
+        settings.captureMode = .video
+        settings.photoOutputFormat = .raw
+
+        let presetSettings = CameraPresetSettings(settings: settings)
+
+        #expect(presetSettings.exposure == settings.exposure)
+        #expect(presetSettings.focus == settings.focus)
+        #expect(presetSettings.whiteBalance == settings.whiteBalance)
+        #expect(presetSettings.aspectRatio == .square)
+        #expect(presetSettings.flashMode == .automatic)
+    }
+
+    @Test func cameraPresetSettingsPreserveDefaultsAndRepresentLockedValuesAsNil() {
+        var settings = CameraSettings.standard
+        settings.focus = .locked
+        settings.whiteBalance = .locked
+
+        let presetSettings = CameraPresetSettings(settings: settings)
+
+        #expect(presetSettings.exposure == CameraSettings.standard.exposure)
+        #expect(presetSettings.focus == nil)
+        #expect(presetSettings.whiteBalance == nil)
+        #expect(presetSettings.aspectRatio == CameraSettings.standard.aspectRatio)
+        #expect(presetSettings.flashMode == CameraSettings.standard.flashMode)
+    }
+
+    @Test func cameraPresetSettingsRoundTripThroughJSON() throws {
+        let presetSettings = CameraPresetSettings(
+            exposure: .automatic(exposureBias: 1),
+            focus: nil,
+            whiteBalance: .manual(temperature: 4_500, tint: -5),
+            aspectRatio: .sixteenByNine,
+            flashMode: .on
+        )
+
+        let data = try JSONEncoder().encode(presetSettings)
+        let decodedSettings = try JSONDecoder().decode(
+            CameraPresetSettings.self,
+            from: data
+        )
+
+        #expect(decodedSettings == presetSettings)
+    }
+
+    @Test @MainActor func cameraPresetStoreSavesUpdatesDeletesAndReordersPresets() {
+        let first = CameraPreset(name: "First", settings: .init())
+        let second = CameraPreset(name: "Second", settings: .init())
+        let store = CameraPresetStore()
+
+        store.save(first)
+        store.save(second)
+        store.select(id: first.id)
+        #expect(store.selectedPresetID == first.id)
+        store.clearSelection()
+        #expect(store.selectedPresetID == nil)
+        var customSettings = CameraSettings.standard
+        customSettings.aspectRatio = .square
+        store.updateUnselectedSettings(customSettings)
+        #expect(store.unselectedSettings.aspectRatio == .square)
+        store.select(id: first.id)
+        var ignoredSettings = customSettings
+        ignoredSettings.aspectRatio = .sixteenByNine
+        store.updateUnselectedSettings(ignoredSettings)
+        #expect(store.unselectedSettings.aspectRatio == .square)
+        var renamedFirst = first
+        renamedFirst.name = "Renamed"
+        store.save(renamedFirst)
+
+        #expect(store.presets.map(\.name) == ["Renamed", "Second"])
+
+        store.move(fromOffsets: IndexSet(integer: 0), toOffset: 2)
+        #expect(store.presets.map(\.name) == ["Second", "Renamed"])
+
+        store.delete(id: second.id)
+        #expect(store.presets == [renamedFirst])
+
+        store.delete(id: first.id)
+        #expect(store.selectedPresetID == nil)
+    }
+
+#if DEBUG
+    @Test func debugCameraPresetsProvideStableCoverageFixtures() {
+        let presets = CameraPreset.debugSamples
+
+        #expect(presets.count == 4)
+        #expect(Set(presets.map(\.id)).count == presets.count)
+        #expect(presets.contains { $0.settings.exposure?.exposureBias != nil })
+        #expect(presets.contains { preset in
+            if case .some(.manual) = preset.settings.exposure { return true }
+            return false
+        })
+        #expect(presets.contains { $0.settings.focus == nil })
+        #expect(
+            Set(presets.compactMap(\.settings.aspectRatio))
+                == Set([CameraAspectRatio.square, .fourByThree, .sixteenByNine])
+        )
+    }
+#endif
+
     @Test func pendingPhotoSurvivesStoreRecreation() async throws {
         let directory = FileManager.default.temporaryDirectory
             .appendingPathComponent(UUID().uuidString, isDirectory: true)

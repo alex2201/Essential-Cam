@@ -11,13 +11,14 @@ import UIKit
 struct CameraView: View {
     @Environment(\.scenePhase) private var scenePhase
     @Environment(\.openURL) private var openURL
+    @Environment(CameraPresetStore.self) private var presetStore
     @State private var viewModel = CameraViewModel()
     @State private var isSettingsPresented = false
     @State private var isGalleryPresented = false
 
     var body: some View {
         ZStack {
-            Color.cyan
+            Color.black.ignoresSafeArea()
 
             VStack(spacing: .zero) {
 #if targetEnvironment(simulator)
@@ -87,6 +88,9 @@ struct CameraView: View {
                     isBackground: newPhase == .background
                 )
             }
+        }
+        .onChange(of: viewModel.controls.settings, initial: true) { _, settings in
+            presetStore.updateUnselectedSettings(settings)
         }
         .alert(item: $viewModel.activeAlert, content: alert(for:))
     }

@@ -8,6 +8,8 @@
 import SwiftUI
 
 struct CameraCaptureView: View {
+    @Environment(CameraPresetStore.self) private var presetStore
+
     let viewModel: CameraViewModel
     let showSettings: () -> Void
     let showGallery: () -> Void
@@ -58,6 +60,13 @@ struct CameraCaptureView: View {
             .overlay(alignment: .topLeading) {
                 CameraSettingsButton(action: showSettings)
                     .padding(8)
+            }
+            .overlay(alignment: .top) {
+                CameraPresetCarouselView(
+                    store: presetStore,
+                    controls: viewModel.controls
+                )
+                .padding(.top, 8)
             }
             .overlay(alignment: .bottom) {
                 Group {
