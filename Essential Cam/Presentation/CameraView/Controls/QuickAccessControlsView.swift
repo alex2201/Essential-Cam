@@ -8,6 +8,7 @@
 import SwiftUI
 
 struct QuickAccessControlsView: View {
+    @Environment(QuickSettingsStore.self) private var store
     let controls: CameraControlsController
     let showAspectRatioSelector: () -> Void
     let showPhotoTimerSelector: () -> Void
@@ -25,6 +26,20 @@ struct QuickAccessControlsView: View {
 
     private var controlsContent: some View {
         VStack(spacing: 8) {
+            ForEach(Array(store.included.enumerated()), id: \.element) { index, control in
+                if index > 0 { separator }
+                controlButton(control)
+            }
+        }
+        .font(.caption)
+        .foregroundStyle(.white)
+        .padding(.vertical, 12)
+    }
+
+    @ViewBuilder
+    private func controlButton(_ control: QuickSettingControl) -> some View {
+        switch control {
+        case .aspectRatio:
             Button(action: showAspectRatioSelector) {
                 VStack(spacing: 4) {
                     Image(systemName: "aspectratio")
@@ -39,27 +54,21 @@ struct QuickAccessControlsView: View {
             .buttonStyle(.plain)
             .accessibilityLabel("Choose aspect ratio")
             .accessibilityValue(controls.settings.aspectRatio.accessibilityName)
-
-            separator
-
+        case .photoTimer:
             quickSettingButton(
                 icon: "timer",
                 value: controls.settings.photoTimer.displayName,
                 accessibilityLabel: "Choose photo timer",
                 action: showPhotoTimerSelector
             )
-
-            separator
-
+        case .photoResolution:
             quickSettingButton(
                 icon: "photo",
                 value: controls.settings.photoResolution?.megapixelDisplayName ?? "Auto",
                 accessibilityLabel: "Choose photo resolution",
                 action: showPhotoResolutionSelector
             )
-
-            separator
-
+        case .exposure:
             Button(action: showExposureEditor) {
                 VStack(spacing: 4) {
                     Text("EXP")
@@ -71,9 +80,7 @@ struct QuickAccessControlsView: View {
                 .frame(maxWidth: .infinity)
                 .contentShape(Rectangle())
             }
-
-            separator
-
+        case .focus:
             Button(action: showFocusEditor) {
                 VStack(spacing: 4) {
                     Text("AF")
@@ -85,9 +92,7 @@ struct QuickAccessControlsView: View {
                 .frame(maxWidth: .infinity)
                 .contentShape(Rectangle())
             }
-
-            separator
-
+        case .whiteBalance:
             Button(action: showWhiteBalanceEditor) {
                 VStack(spacing: 4) {
                     Text("WB")
@@ -100,9 +105,6 @@ struct QuickAccessControlsView: View {
                 .contentShape(Rectangle())
             }
         }
-        .font(.caption)
-        .foregroundStyle(.white)
-        .padding(.vertical, 12)
     }
 
     private var separator: some View {

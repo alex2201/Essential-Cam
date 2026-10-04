@@ -8,6 +8,7 @@
 import SwiftUI
 
 struct CameraControlsOverlayView: View {
+    @Environment(QuickSettingsStore.self) private var quickSettingsStore
     let viewModel: CameraViewModel
 
     @State private var presentedControl: PresentedCameraControl?
@@ -103,15 +104,17 @@ struct CameraControlsOverlayView: View {
 
     private var defaultControls: some View {
         VStack(spacing: 24) {
-            QuickAccessControlsView(
-                controls: viewModel.controls,
-                showAspectRatioSelector: { present(.aspectRatio) },
-                showPhotoTimerSelector: { present(.photoTimer) },
-                showPhotoResolutionSelector: { present(.photoResolution) },
-                showExposureEditor: { present(.exposure) },
-                showFocusEditor: { present(.focus) },
-                showWhiteBalanceEditor: { present(.whiteBalance) }
-            )
+            if !quickSettingsStore.included.isEmpty {
+                QuickAccessControlsView(
+                    controls: viewModel.controls,
+                    showAspectRatioSelector: { present(.aspectRatio) },
+                    showPhotoTimerSelector: { present(.photoTimer) },
+                    showPhotoResolutionSelector: { present(.photoResolution) },
+                    showExposureEditor: { present(.exposure) },
+                    showFocusEditor: { present(.focus) },
+                    showWhiteBalanceEditor: { present(.whiteBalance) }
+                )
+            }
 
             CameraSelectionControlsView(
                 camera: viewModel.selectedCamera,

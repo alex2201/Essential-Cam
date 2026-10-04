@@ -3,7 +3,7 @@ import Observation
 
 @MainActor
 @Observable
-final class CameraPresetStore {
+final class CameraPresetStore: CameraPresetsLoading {
     private(set) var presets: [CameraPreset]
     private(set) var selectedPresetID: CameraPreset.ID?
     private(set) var unselectedSettings: CameraSettings

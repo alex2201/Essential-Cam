@@ -41,6 +41,12 @@ struct CameraSettingsView: View {
                     }
                 }
 
+                Section("Personalization") {
+                    NavigationLink("Quick Settings") {
+                        QuickSettingsCustomizationView()
+                    }
+                }
+
                 Section("Presets") {
                     settingsLink(
                         "Camera Presets",
