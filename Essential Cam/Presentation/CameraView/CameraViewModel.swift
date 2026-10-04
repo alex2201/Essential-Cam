@@ -28,6 +28,9 @@ final class CameraViewModel {
     private(set) var availablePhotoResolutions: [PhotoResolution] = []
     private(set) var hasPendingPhoto = false
     private(set) var captureCountdown: Int?
+    private(set) var selectedCaptureMode: CaptureMode = .photo
+    private(set) var isCheckingVideoPermissions = false
+    private(set) var videoPermissionsGranted = false
 
     var preferredVirtualCamera: Camera? {
         availableVirtualCameras.max {
@@ -51,6 +54,7 @@ final class CameraViewModel {
     private let photoCoordinator: any PhotoCaptureCoordinating
     private let photoLibraryReader: any PhotoLibraryReading
     private let photoLibraryAuthorization: any PhotoLibraryAuthorizationProviding
+    private let videoPermissions: any VideoPermissionsProviding
     private let lifecycle = CameraLifecycleController()
     private var didRestorePendingPhoto = false
     private let logger = Logger(
@@ -78,7 +82,8 @@ final class CameraViewModel {
         pendingPhotoStore: PendingPhotoStore = .init(),
         photoCoordinator: (any PhotoCaptureCoordinating)? = nil,
         photoLibraryReader: (any PhotoLibraryReading)? = nil,
-        photoLibraryAuthorization: (any PhotoLibraryAuthorizationProviding)? = nil
+        photoLibraryAuthorization: (any PhotoLibraryAuthorizationProviding)? = nil,
+        videoPermissions: any VideoPermissionsProviding = DefaultVideoPermissions()
     ) {
         self.cameraSession = cameraSession
         self.photoCoordinator = photoCoordinator ?? PhotoCaptureCoordinator(
@@ -88,6 +93,7 @@ final class CameraViewModel {
         )
         self.photoLibraryReader = photoLibraryReader ?? photoLibrary
         self.photoLibraryAuthorization = photoLibraryAuthorization ?? photoLibrary
+        self.videoPermissions = videoPermissions
         controls = CameraControlsController(cameraSession: cameraSession)
     }
 
@@ -144,6 +150,43 @@ final class CameraViewModel {
         }
         await refreshRecentPhotoThumbnails()
         await presentPendingPhotoActionsIfNeeded()
+        if selectedCaptureMode == .video {
+            await checkVideoPermissions()
+        }
+    }
+
+    func selectCaptureMode(_ mode: CaptureMode) {
+        guard !isCheckingVideoPermissions, operation == .none else { return }
+        selectedCaptureMode = mode
+        videoPermissionsGranted = false
+        if case .videoPermissionRequired = activeAlert {
+            activeAlert = nil
+        }
+    }
+
+    func checkVideoPermissions(requestIfNeeded: Bool = true) async {
+        guard selectedCaptureMode == .video, !isCheckingVideoPermissions else { return }
+        isCheckingVideoPermissions = true
+        videoPermissionsGranted = false
+        defer { isCheckingVideoPermissions = false }
+
+        do {
+            let missing = try await CheckVideoPermissionsUseCase(
+                permissions: videoPermissions
+            ).execute(requestIfNeeded: requestIfNeeded)
+            guard selectedCaptureMode == .video, !Task.isCancelled else { return }
+            videoPermissionsGranted = missing == nil
+            if case .videoPermissionRequired = activeAlert {
+                activeAlert = nil
+            }
+            if let missing, activeAlert == nil {
+                activeAlert = .videoPermissionRequired(missing)
+            }
+        } catch is CancellationError {
+            // A mode change cancels the check, including remaining prompts.
+        } catch {
+            logger.error("Video permission check failed: \(error.localizedDescription, privacy: .public)")
+        }
     }
 
     func retryCamera() {
@@ -451,7 +494,8 @@ final class CameraViewModel {
     }
 }
 
-enum CameraAlert: String, Identifiable {
+enum CameraAlert: Equatable, Identifiable {
+    case videoPermissionRequired(VideoPermission)
     case captureFailed
     case photoSaveFailed
     case photoLibraryUnauthorized
@@ -459,7 +503,7 @@ enum CameraAlert: String, Identifiable {
     case cameraSwitchFailed
     case cameraRecoveryFailed
 
-    var id: String { rawValue }
+    var id: String { String(describing: self) }
 }
 
 struct CapturedPhotoPreview: Identifiable {

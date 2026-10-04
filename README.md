@@ -17,6 +17,7 @@ The project focuses on capturing clean, editing-ready photos with Apple's camera
 - Off, on, and automatic flash modes
 - Camera capability detection so controls adapt to the current device
 - Accessible labels and selection states for camera controls
+- Camera, microphone, and add-only Photo Library permission checks when entering Video mode
 
 ## Requirements
 
@@ -40,6 +41,12 @@ The app has no third-party dependencies.
 4. Choose your development team under **Signing & Capabilities** if required.
 5. Build and run the app.
 6. Allow Camera and Photo Library access when prompted.
+
+Switching to Video checks camera, microphone, and permission to add media to the
+Photo Library, requesting undecided permissions in that order. If access is
+denied, open Settings from the alert or return to Photo mode. Permissions are
+checked again when the app becomes active in Video mode. Microphone access is
+not required for photos. Video recording itself is not implemented yet.
 
 > The iOS Simulator does not provide the same camera hardware or capabilities as a physical iPhone. Use a real device when testing capture, flash, focus, exposure, white balance, and lens selection.
 

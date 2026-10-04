@@ -34,6 +34,52 @@ final class Essential_CamUITests: XCTestCase {
     }
 
     @MainActor
+    func testVideoModeChecksPermissionsAndAllowsReturningToPhoto() throws {
+#if targetEnvironment(simulator)
+        throw XCTSkip("Camera interaction requires the physical test iPhone.")
+#else
+        let app = XCUIApplication()
+        app.launch()
+        let mode = app.buttons["Switch capture mode"]
+        XCTAssertTrue(mode.waitForExistence(timeout: 15))
+        XCTAssertEqual(mode.value as? String, "Photo")
+        mode.tap()
+
+        let system = XCUIApplication(bundleIdentifier: "com.apple.springboard")
+        let record = app.buttons["Record Video"]
+        let deadline = Date().addingTimeInterval(30)
+        while Date() < deadline {
+            let systemAlert = system.alerts.firstMatch
+            if systemAlert.exists {
+                for label in ["Allow", "OK", "Allow Photos to Be Added", "Allow Access to All Photos"] {
+                    let button = systemAlert.buttons[label]
+                    if button.exists {
+                        button.tap()
+                        break
+                    }
+                }
+            }
+            if app.alerts.firstMatch.exists || (record.exists && record.isEnabled) { break }
+            Thread.sleep(forTimeInterval: 0.2)
+        }
+
+        XCTAssertEqual(mode.value as? String, "Video")
+        if app.alerts.firstMatch.exists {
+            let alert = app.alerts.firstMatch
+            XCTAssertTrue(alert.buttons["Open Settings"].exists)
+            XCTAssertFalse(record.isEnabled)
+            alert.buttons["Cancel"].tap()
+        } else {
+            XCTAssertTrue(record.exists && record.isEnabled, "Video permissions should finish checking")
+        }
+        XCTAssertTrue(mode.isEnabled)
+        mode.tap()
+        XCTAssertEqual(mode.value as? String, "Photo")
+        XCTAssertTrue(app.buttons["Take Photo"].waitForExistence(timeout: 3))
+#endif
+    }
+
+    @MainActor
     func testLaunchPerformance() throws {
         // This measures how long it takes to launch your application.
         measure(metrics: [XCTApplicationLaunchMetric()]) {

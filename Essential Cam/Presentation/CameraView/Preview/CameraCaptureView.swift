@@ -17,7 +17,6 @@ struct CameraCaptureView: View {
     @State private var zoomFactorAtGestureStart: Double?
     @State private var displayedCapturePreview: CapturedPhotoPreview?
     @State private var isCapturePreviewFlyingToGallery = false
-    @State private var selectedCaptureMode: CaptureMode = .photo
     @State private var displayedCaptureMode: CaptureMode = .photo
     @State private var captureIndicatorScale: CGFloat = 1
 
@@ -82,11 +81,12 @@ struct CameraCaptureView: View {
                             recordAction: {},
                             indicatorScale: captureIndicatorScale
                         )
+                        .disabled(!viewModel.videoPermissionsGranted || viewModel.isCheckingVideoPermissions)
                     }
                 }
                 .padding(.bottom, 42)
-                .task(id: selectedCaptureMode) {
-                    await animateCaptureButton(to: selectedCaptureMode)
+                .task(id: viewModel.selectedCaptureMode) {
+                    await animateCaptureButton(to: viewModel.selectedCaptureMode)
                 }
             }
             .overlay(alignment: .bottomLeading) {
@@ -100,7 +100,11 @@ struct CameraCaptureView: View {
                 .accessibilityHint("Shows your photos in a grid")
             }
             .overlay(alignment: .bottomTrailing) {
-                CaptureModeButton(selectedMode: $selectedCaptureMode)
+                CaptureModeButton(selectedMode: Binding(
+                    get: { viewModel.selectedCaptureMode },
+                    set: { viewModel.selectCaptureMode($0) }
+                ))
+                    .disabled(viewModel.isCheckingVideoPermissions)
                     .padding(.trailing, 16)
                     .padding(.bottom, 16)
             }

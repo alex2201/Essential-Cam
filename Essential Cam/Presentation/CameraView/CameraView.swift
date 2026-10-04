@@ -89,6 +89,9 @@ struct CameraView: View {
                 )
             }
         }
+        .task(id: viewModel.selectedCaptureMode) {
+            await viewModel.checkVideoPermissions()
+        }
         .onChange(of: viewModel.controls.settings, initial: true) { _, settings in
             presetStore.updateUnselectedSettings(settings)
         }
@@ -137,6 +140,13 @@ struct CameraView: View {
 
     private func alert(for alert: CameraAlert) -> Alert {
         switch alert {
+        case let .videoPermissionRequired(permission):
+            Alert(
+                title: Text(permission.alertTitle),
+                message: Text(permission.alertMessage),
+                primaryButton: .default(Text("Open Settings"), action: openSettings),
+                secondaryButton: .cancel()
+            )
         case .captureFailed:
             Alert(
                 title: Text("Photo Not Captured"),
@@ -183,5 +193,26 @@ struct CameraView: View {
     private func openSettings() {
         guard let url = URL(string: UIApplication.openSettingsURLString) else { return }
         openURL(url)
+    }
+}
+
+private extension VideoPermission {
+    var alertTitle: String {
+        switch self {
+        case .camera: "Camera Access Required"
+        case .microphone: "Microphone Access Required"
+        case .photoLibrary: "Photos Access Required"
+        }
+    }
+
+    var alertMessage: String {
+        switch self {
+        case .camera:
+            "Allow camera access in Settings to record video. You can also return to Photo mode."
+        case .microphone:
+            "Allow microphone access in Settings to record video with audio. You can still take photos."
+        case .photoLibrary:
+            "Allow Essential Cam to add photos and videos in Settings to save your recordings."
+        }
     }
 }
