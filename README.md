@@ -6,7 +6,7 @@ The project focuses on capturing clean, editing-ready photos with Apple's camera
 
 ## Features
 
-- Live camera preview with orientation support
+- Live camera preview with a portrait-only interface
 - Photo capture and automatic saving to the Photo Library
 - Basic 1080p/30 fps SDR video recording with microphone audio
 - Video thumbnails with a play overlay and in-app playback

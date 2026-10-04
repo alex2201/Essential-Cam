@@ -14,8 +14,6 @@ final class Essential_CamUITests: XCTestCase {
 
         // In UI tests it is usually best to stop immediately when a failure occurs.
         continueAfterFailure = false
-
-        // In UI tests it’s important to set the initial state - such as interface orientation - required for your tests before they run. The setUp method is a good place to do this.
     }
 
     override func tearDownWithError() throws {
@@ -26,6 +24,7 @@ final class Essential_CamUITests: XCTestCase {
     func testExample() throws {
         // UI tests must launch the application that they test.
         let app = XCUIApplication()
+        XCUIDevice.shared.orientation = .portrait
         app.launch()
 
         // Use XCTAssert and related functions to verify your tests produce the correct results.
@@ -37,6 +36,7 @@ final class Essential_CamUITests: XCTestCase {
     func testOnboardingAppearsBeforeCameraAndDoesNotAutomaticallyPrompt() throws {
         let app = XCUIApplication()
         app.launchArguments = ["-hasCompletedOnboarding", "NO"]
+        XCUIDevice.shared.orientation = .portrait
         app.launch()
         XCTAssertTrue(app.staticTexts["Welcome to Essential Cam"].waitForExistence(timeout: 10))
         XCTAssertFalse(app.buttons["Take Photo"].exists)
@@ -47,36 +47,31 @@ final class Essential_CamUITests: XCTestCase {
         XCTAssertFalse(app.buttons["Take Photo"].exists)
         XCTAssertFalse(system.alerts.firstMatch.exists)
         app.terminate()
+        XCUIDevice.shared.orientation = .portrait
         app.launch()
         XCTAssertTrue(app.staticTexts["Welcome to Essential Cam"].waitForExistence(timeout: 10))
     }
 
     @MainActor
-    func testOnboardingSupportsLargeTextAndLandscape() throws {
+    func testOnboardingSupportsLargeTextInPortrait() throws {
         let app = XCUIApplication()
         app.launchArguments = [
             "-hasCompletedOnboarding", "NO",
             "-UIPreferredContentSizeCategoryName", "UICTContentSizeCategoryAccessibilityXXXL"
         ]
+        XCUIDevice.shared.orientation = .portrait
         app.launch()
-        defer { XCUIDevice.shared.orientation = .portrait }
         XCTAssertTrue(app.staticTexts["Welcome to Essential Cam"].waitForExistence(timeout: 10))
-        for orientation in [UIDeviceOrientation.portrait, .landscapeLeft, .landscapeRight] {
-            XCUIDevice.shared.orientation = orientation
-            // Wait for the rotation animation before inspecting the layout or
-            // taking a screenshot; accessibility can update before rendering.
-            Thread.sleep(forTimeInterval: 1)
-            let button = app.buttons["onboarding.continue"]
-            for _ in 0..<5 {
-                if button.isHittable { break }
-                app.swipeUp()
-            }
-            XCTAssertTrue(button.isHittable, "Get Started must remain reachable with large text")
-            let attachment = XCTAttachment(screenshot: app.screenshot())
-            attachment.name = "Onboarding large text \(orientation.rawValue)"
-            attachment.lifetime = .keepAlways
-            add(attachment)
+        let button = app.buttons["onboarding.continue"]
+        for _ in 0..<5 {
+            if button.isHittable { break }
+            app.swipeUp()
         }
+        XCTAssertTrue(button.isHittable, "Get Started must remain reachable with large text")
+        let attachment = XCTAttachment(screenshot: app.screenshot())
+        attachment.name = "Onboarding large text portrait"
+        attachment.lifetime = .keepAlways
+        add(attachment)
     }
 
     @MainActor
@@ -84,6 +79,7 @@ final class Essential_CamUITests: XCTestCase {
 #if targetEnvironment(simulator)
         let app = XCUIApplication()
         app.launchArguments = ["-hasCompletedOnboarding", "NO"]
+        XCUIDevice.shared.orientation = .portrait
         app.launch()
         XCTAssertTrue(app.staticTexts["Welcome to Essential Cam"].waitForExistence(timeout: 10))
         app.buttons["onboarding.continue"].tap()
@@ -114,6 +110,7 @@ final class Essential_CamUITests: XCTestCase {
         // The launch argument overrides persisted defaults while this process
         // runs. Remove it to verify the value saved by Open Camera.
         app.launchArguments = []
+        XCUIDevice.shared.orientation = .portrait
         app.launch()
         XCTAssertTrue(app.buttons["Take Photo"].waitForExistence(timeout: 10))
         XCTAssertFalse(app.staticTexts["Welcome to Essential Cam"].exists)
@@ -127,6 +124,7 @@ final class Essential_CamUITests: XCTestCase {
 #if targetEnvironment(simulator)
         let app = XCUIApplication()
         app.launchArguments = ["-hasCompletedOnboarding", "YES"]
+        XCUIDevice.shared.orientation = .portrait
         app.launch()
         XCTAssertTrue(app.buttons["Take Photo"].waitForExistence(timeout: 10))
         XCTAssertFalse(app.staticTexts["Welcome to Essential Cam"].exists)
@@ -142,6 +140,7 @@ final class Essential_CamUITests: XCTestCase {
 #else
         let app = XCUIApplication()
         app.launchArguments = ["-hasCompletedOnboarding", "YES"]
+        XCUIDevice.shared.orientation = .portrait
         app.launch()
         let mode = app.buttons["Switch capture mode"]
         XCTAssertTrue(mode.waitForExistence(timeout: 15))
@@ -189,8 +188,8 @@ final class Essential_CamUITests: XCTestCase {
 #else
         let app = XCUIApplication()
         app.launchArguments = ["-hasCompletedOnboarding", "YES", "-UIPreferredContentSizeCategoryName", "UICTContentSizeCategoryAccessibilityXXXL"]
+        XCUIDevice.shared.orientation = .portrait
         app.launch()
-        defer { XCUIDevice.shared.orientation = .portrait }
         let mode = app.buttons["Switch capture mode"]
         XCTAssertTrue(mode.waitForExistence(timeout: 20))
 
@@ -207,28 +206,25 @@ final class Essential_CamUITests: XCTestCase {
         expectation(for: enabled, evaluatedWith: record)
         waitForExpectations(timeout: 15)
 
-        for orientation in [UIDeviceOrientation.portrait, .landscapeLeft, .landscapeRight] {
-            XCUIDevice.shared.orientation = orientation
-            Thread.sleep(forTimeInterval: 1)
-            record.tap()
-            let stop = app.buttons["Stop Recording"]
-            XCTAssertTrue(stop.waitForExistence(timeout: 10), "Recording must actually start")
-            XCTAssertTrue(stop.isEnabled, "Stop must remain usable while other controls are locked")
-            XCTAssertFalse(mode.isEnabled)
-            XCTAssertFalse(app.buttons["Open Photo Library"].isEnabled)
-            Thread.sleep(forTimeInterval: 3)
-            let attachment = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
-            attachment.name = "Video recording \(orientation.rawValue)"
-            attachment.lifetime = .keepAlways
-            add(attachment)
-            stop.tap()
-            XCTAssertTrue(record.waitForExistence(timeout: 10))
-            expectation(for: enabled, evaluatedWith: record)
-            waitForExpectations(timeout: 20)
-            XCTAssertFalse(app.alerts.firstMatch.exists, "Recording and save must complete without an error")
-            XCTAssertEqual(app.buttons["Open Photo Library"].value as? String, "Latest capture: Video")
-            XCTAssertTrue(mode.isEnabled)
-        }
+        Thread.sleep(forTimeInterval: 1)
+        record.tap()
+        let stop = app.buttons["Stop Recording"]
+        XCTAssertTrue(stop.waitForExistence(timeout: 10), "Recording must actually start")
+        XCTAssertTrue(stop.isEnabled, "Stop must remain usable while other controls are locked")
+        XCTAssertFalse(mode.isEnabled)
+        XCTAssertFalse(app.buttons["Open Photo Library"].isEnabled)
+        Thread.sleep(forTimeInterval: 3)
+        let attachment = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+        attachment.name = "Video recording portrait"
+        attachment.lifetime = .keepAlways
+        add(attachment)
+        stop.tap()
+        XCTAssertTrue(record.waitForExistence(timeout: 10))
+        expectation(for: enabled, evaluatedWith: record)
+        waitForExpectations(timeout: 20)
+        XCTAssertFalse(app.alerts.firstMatch.exists, "Recording and save must complete without an error")
+        XCTAssertEqual(app.buttons["Open Photo Library"].value as? String, "Latest capture: Video")
+        XCTAssertTrue(mode.isEnabled)
 
         // Also check front-camera recording and finalization when backgrounded.
         XCUIDevice.shared.orientation = .portrait
@@ -302,21 +298,19 @@ final class Essential_CamUITests: XCTestCase {
             "-storageCapacityForTesting", "500000000",
             "-UIPreferredContentSizeCategoryName", "UICTContentSizeCategoryAccessibilityXXXL"
         ]
-        defer { XCUIDevice.shared.orientation = .portrait }
-        for orientation in [UIDeviceOrientation.portrait, .landscapeLeft] {
-            XCUIDevice.shared.orientation = orientation
-            app.launch()
-            let warning = app.alerts["Low Storage"]
-            XCTAssertTrue(warning.waitForExistence(timeout: 10))
-            XCTAssertTrue(warning.staticTexts.matching(NSPredicate(format: "label CONTAINS %@", "500 MB")).firstMatch.exists)
-            XCTAssertFalse(app.staticTexts["Welcome to Essential Cam"].exists)
-            XCTAssertTrue(warning.buttons["Continue"].isHittable)
-            warning.buttons["Continue"].tap()
-            XCTAssertTrue(app.staticTexts["Welcome to Essential Cam"].waitForExistence(timeout: 5))
-            XCTAssertFalse(warning.exists)
-            app.terminate()
-        }
+        XCUIDevice.shared.orientation = .portrait
+        app.launch()
+        let warning = app.alerts["Low Storage"]
+        XCTAssertTrue(warning.waitForExistence(timeout: 10))
+        XCTAssertTrue(warning.staticTexts.matching(NSPredicate(format: "label CONTAINS %@", "500 MB")).firstMatch.exists)
+        XCTAssertFalse(app.staticTexts["Welcome to Essential Cam"].exists)
+        XCTAssertTrue(warning.buttons["Continue"].isHittable)
+        warning.buttons["Continue"].tap()
+        XCTAssertTrue(app.staticTexts["Welcome to Essential Cam"].waitForExistence(timeout: 5))
+        XCTAssertFalse(warning.exists)
+        app.terminate()
         app.launchArguments = ["-hasCompletedOnboarding", "NO", "-storageCapacityForTesting", "unavailable"]
+        XCUIDevice.shared.orientation = .portrait
         app.launch()
         let unavailable = app.alerts["Storage Check Unavailable"]
         XCTAssertTrue(unavailable.waitForExistence(timeout: 10))
@@ -328,6 +322,7 @@ final class Essential_CamUITests: XCTestCase {
     func testSufficientStartupStorageDoesNotWarn() throws {
         let app = XCUIApplication()
         app.launchArguments = ["-hasCompletedOnboarding", "NO", "-storageCapacityForTesting", "1000000000"]
+        XCUIDevice.shared.orientation = .portrait
         app.launch()
         XCTAssertTrue(app.staticTexts["Welcome to Essential Cam"].waitForExistence(timeout: 10))
         XCTAssertFalse(app.alerts.firstMatch.exists)

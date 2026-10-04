@@ -77,14 +77,8 @@ extension CameraPreview {
 
         override func layoutSubviews() {
             super.layoutSubviews()
-            if isVideoMode, let orientation = window?.windowScene?.interfaceOrientation,
-               let connection = previewLayer.connection {
-                let angle: CGFloat = switch orientation {
-                case .landscapeLeft: 180
-                case .landscapeRight: 0
-                case .portraitUpsideDown: 270
-                default: 90
-                }
+            if isVideoMode, let connection = previewLayer.connection {
+                let angle: CGFloat = 90
                 if connection.isVideoRotationAngleSupported(angle) { connection.videoRotationAngle = angle }
             }
 #if targetEnvironment(simulator)

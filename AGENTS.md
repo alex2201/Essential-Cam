@@ -39,7 +39,8 @@
 
 ## UI rules
 
-- Preserve accessible labels, values, and selection states for camera controls. Verify changed layouts with larger text and supported orientations.
+- Essential Cam supports only portrait (vertical) UI. Landscape (horizontal) UI is outside the product scope. Keep UI automation, screenshots, layout checks, and manual UI validation in portrait; do not introduce landscape use cases or requirements.
+- Preserve accessible labels, values, and selection states for camera controls. Verify changed layouts with larger text in portrait.
 - Reflect active hardware capabilities and capture state in enabled/disabled controls. Surface recoverable failures with a clear retry or discard path when applicable.
 
 ## Validation
@@ -73,7 +74,7 @@
     com.alexanderlopez.Essential-Cam
   ```
 
-- Run each device step only after the preceding step succeeds. Exercise the changed behavior on hardware when accessible: preview, capture/save, changed controls, orientation, or lifecycle recovery as relevant. Launch success alone does not establish that these interactions work.
+- Run each device step only after the preceding step succeeds. Exercise the changed behavior on hardware in portrait when accessible: preview, capture/save, changed controls, or lifecycle recovery as relevant. Launch success alone does not establish that these interactions work.
 - If the device is unavailable, installation or launch fails, or manual verification cannot be performed, report the exact limitation. Distinguish build, tests, installation, launch, and behavior checks in the completion report.
 - Documentation-only changes do not require a device build/install/launch.
 

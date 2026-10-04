@@ -20,6 +20,7 @@ final class Essential_CamUITestsLaunchTests: XCTestCase {
     @MainActor
     func testLaunch() throws {
         let app = XCUIApplication()
+        XCUIDevice.shared.orientation = .portrait
         app.launch()
 
         // Insert steps here to perform after app launch but before taking a screenshot,
