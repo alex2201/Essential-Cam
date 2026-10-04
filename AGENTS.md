@@ -81,3 +81,4 @@
 
 - Prioritize main-thread blocking, actor-isolation violations, unbalanced configuration transactions, unsupported hardware settings, photo loss or duplicate saves, persistence compatibility, and lifecycle races.
 - Flag missing validation for changed behavior. Tie each finding to a concrete trigger and user impact.
+- Swift files must contain preserve header indicating filename and author related info.
