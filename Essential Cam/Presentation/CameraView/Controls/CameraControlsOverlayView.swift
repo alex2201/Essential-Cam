@@ -22,6 +22,34 @@ struct CameraControlsOverlayView: View {
             }
 
             switch presentedControl {
+            case .photoTimer:
+                QuickSettingSelectionView(
+                    title: "Photo timer",
+                    icon: "timer",
+                    values: PhotoTimer.allCases,
+                    selectedValue: viewModel.controls.settings.photoTimer,
+                    label: { $0.displayName },
+                    select: {
+                        viewModel.controls.setPhotoTimer($0)
+                        dismiss(.photoTimer)
+                    },
+                    dismiss: { dismiss(.photoTimer) }
+                )
+                .transition(controlTransition)
+            case .photoResolution:
+                QuickSettingSelectionView(
+                    title: "Photo resolution",
+                    icon: "photo",
+                    values: viewModel.availablePhotoResolutions,
+                    selectedValue: viewModel.controls.settings.photoResolution,
+                    label: { $0.megapixelDisplayName },
+                    select: {
+                        viewModel.controls.setPhotoResolution($0)
+                        dismiss(.photoResolution)
+                    },
+                    dismiss: { dismiss(.photoResolution) }
+                )
+                .transition(controlTransition)
             case .aspectRatio:
                 AspectRatioSelectionView(
                     selectedAspectRatio: viewModel.controls.settings.aspectRatio,
@@ -78,6 +106,8 @@ struct CameraControlsOverlayView: View {
             QuickAccessControlsView(
                 controls: viewModel.controls,
                 showAspectRatioSelector: { present(.aspectRatio) },
+                showPhotoTimerSelector: { present(.photoTimer) },
+                showPhotoResolutionSelector: { present(.photoResolution) },
                 showExposureEditor: { present(.exposure) },
                 showFocusEditor: { present(.focus) },
                 showWhiteBalanceEditor: { present(.whiteBalance) }
@@ -163,6 +193,8 @@ struct CameraControlsOverlayView: View {
 }
 
 private enum PresentedCameraControl: Equatable {
+    case photoTimer
+    case photoResolution
     case aspectRatio
     case exposure
     case focus

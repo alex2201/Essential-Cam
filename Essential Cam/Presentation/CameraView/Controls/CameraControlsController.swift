@@ -37,6 +37,7 @@ final class CameraControlsController {
     private(set) var supportsAutomaticWhiteBalance = false
     private(set) var supportsManualWhiteBalance = false
     private(set) var zoomFactorRange: ClosedRange<Double> = 1...1
+    private(set) var supportsContentAwareCorrection = false
 
     let whiteBalanceTemperatureRange: ClosedRange<Double> = 2_000...10_000
     let whiteBalanceTintRange: ClosedRange<Double> = -150...150
@@ -109,6 +110,7 @@ final class CameraControlsController {
         await updateFocusCapabilities()
         await updateWhiteBalanceCapabilities()
         await updateZoomCapabilities(preferredZoomFactor: preferredZoomFactor)
+        await updateContentAwareCorrectionCapability()
 
         if afterCameraSwitch {
             settingsThrottler.cancel()
@@ -143,6 +145,25 @@ final class CameraControlsController {
     func setPhotoOutputFormat(_ outputFormat: PhotoOutputFormat) {
         isDeviceApplicationSuppressed = true
         settings.photoOutputFormat = outputFormat
+        isDeviceApplicationSuppressed = false
+    }
+
+    func setPhotoResolution(_ resolution: PhotoResolution?) {
+        isDeviceApplicationSuppressed = true
+        settings.photoResolution = resolution
+        isDeviceApplicationSuppressed = false
+    }
+
+    func setPhotoTimer(_ timer: PhotoTimer) {
+        isDeviceApplicationSuppressed = true
+        settings.photoTimer = timer
+        isDeviceApplicationSuppressed = false
+    }
+
+    func setContentAwareCorrection(_ correction: ContentAwareCorrection) {
+        guard correction == .off || supportsContentAwareCorrection else { return }
+        isDeviceApplicationSuppressed = true
+        settings.contentAwareCorrection = correction
         isDeviceApplicationSuppressed = false
     }
 
@@ -438,6 +459,13 @@ final class CameraControlsController {
         isDeviceApplicationSuppressed = true
         settings.zoomFactor = zoomFactor
         isDeviceApplicationSuppressed = false
+    }
+
+    private func updateContentAwareCorrectionCapability() async {
+        supportsContentAwareCorrection = await cameraSession.supportsContentAwareCorrection()
+        if !supportsContentAwareCorrection, settings.contentAwareCorrection != .off {
+            setContentAwareCorrection(.off)
+        }
     }
 
     // MARK: - White Balance Validation

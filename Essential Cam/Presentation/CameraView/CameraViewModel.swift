@@ -25,7 +25,9 @@ final class CameraViewModel {
     private(set) var selectedCamera: Camera?
     private(set) var canSwitchCameraPosition = false
     private(set) var availablePhotoOutputFormats: [PhotoOutputFormat] = []
+    private(set) var availablePhotoResolutions: [PhotoResolution] = []
     private(set) var hasPendingPhoto = false
+    private(set) var captureCountdown: Int?
 
     var preferredVirtualCamera: Camera? {
         availableVirtualCameras.max {
@@ -109,6 +111,7 @@ final class CameraViewModel {
             selectedCamera = await cameraSession.selectedCamera()
             canSwitchCameraPosition = await cameraSession.canSwitchCameraPosition()
             await refreshPhotoOutputFormats()
+            await refreshPhotoResolutions()
             await controls.synchronizeWithCamera()
             cameraStatus = .running
         } catch {
@@ -163,8 +166,23 @@ final class CameraViewModel {
             defer { finishOperation() }
 
             do {
-                let photo = try await photoCoordinator.capture(settings: controls.settings)
+                let settings = controls.settings
+                if settings.photoTimer != .off {
+                    for remaining in stride(
+                        from: settings.photoTimer.rawValue,
+                        through: 1,
+                        by: -1
+                    ) {
+                        captureCountdown = remaining
+                        try await Task.sleep(for: .seconds(1))
+                    }
+                    captureCountdown = nil
+                    guard cameraStatus == .running else { return }
+                }
+                let photo = try await photoCoordinator.capture(settings: settings)
                 handleSavedPhoto(photo)
+            } catch is CancellationError {
+                captureCountdown = nil
             } catch let error as PhotoCaptureWorkflowError {
                 // TODO: Track this error with the integrated logging service.
                 await handlePhotoWorkflowError(error)
@@ -288,6 +306,7 @@ final class CameraViewModel {
                 )
                 selectedCamera = camera
                 await refreshPhotoOutputFormats()
+                await refreshPhotoResolutions()
             } catch {
                 // TODO: Track this error with the integrated logging service.
                 activeAlert = .cameraSwitchFailed
@@ -313,6 +332,7 @@ final class CameraViewModel {
                 selectedCamera = await cameraSession.selectedCamera()
                 await controls.synchronizeWithCamera(afterCameraSwitch: true)
                 await refreshPhotoOutputFormats()
+                await refreshPhotoResolutions()
             } catch {
                 // TODO: Track this error with the integrated logging service.
                 activeAlert = .cameraSwitchFailed
@@ -356,6 +376,7 @@ final class CameraViewModel {
     }
 
     private func finishOperation() {
+        captureCountdown = nil
         operation = .none
         guard let failure = lifecycle.takePendingRecovery() else { return }
         Task { await recoverCamera(failure: failure) }
@@ -389,6 +410,7 @@ final class CameraViewModel {
             selectedCamera = await cameraSession.selectedCamera()
             canSwitchCameraPosition = await cameraSession.canSwitchCameraPosition()
             await refreshPhotoOutputFormats()
+            await refreshPhotoResolutions()
             await controls.synchronizeWithCamera()
             cameraStatus = .running
         } catch let error {
@@ -412,6 +434,20 @@ final class CameraViewModel {
            let fallback = availablePhotoOutputFormats.first {
             controls.setPhotoOutputFormat(fallback)
         }
+    }
+
+    private func refreshPhotoResolutions() async {
+        availablePhotoResolutions = await cameraSession.availablePhotoResolutions()
+        guard let largestResolution = availablePhotoResolutions.last else {
+            controls.setPhotoResolution(nil)
+            return
+        }
+
+        if let selectedResolution = controls.settings.photoResolution,
+           availablePhotoResolutions.contains(selectedResolution) {
+            return
+        }
+        controls.setPhotoResolution(largestResolution)
     }
 }
 

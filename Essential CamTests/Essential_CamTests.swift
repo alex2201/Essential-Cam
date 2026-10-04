@@ -24,11 +24,15 @@ struct Essential_CamTests {
             aspectRatio: .fourByThree,
             flashMode: .automatic
         )
+        var configuredSettings = settings
+        configuredSettings.photoResolution = PhotoResolution(width: 8_064, height: 6_048)
+        configuredSettings.photoTimer = .fiveSeconds
+        configuredSettings.contentAwareCorrection = .automatic
 
-        let data = try JSONEncoder().encode(settings)
+        let data = try JSONEncoder().encode(configuredSettings)
         let decodedSettings = try JSONDecoder().decode(CameraSettings.self, from: data)
 
-        #expect(decodedSettings == settings)
+        #expect(decodedSettings == configuredSettings)
     }
 
     @Test @MainActor func cameraSettingsStorePersistsAndRestores() throws {
@@ -39,6 +43,9 @@ struct Essential_CamTests {
         var settings = CameraSettings.standard
         settings.aspectRatio = .square
         settings.photoOutputFormat = .tiff
+        settings.photoResolution = PhotoResolution(width: 4_032, height: 3_024)
+        settings.photoTimer = .tenSeconds
+        settings.contentAwareCorrection = .automatic
         settings.zoomFactor = 2
 
         store.save(settings)
@@ -452,6 +459,8 @@ private actor PhotoCaptureSpy: PhotoCapturing {
         flashMode: CameraFlashMode,
         aspectRatio: CameraAspectRatio,
         outputFormat: PhotoOutputFormat,
+        resolution: PhotoResolution?,
+        contentAwareCorrection: ContentAwareCorrection,
         previewHandler: @escaping @Sendable (CGImage) -> Void
     ) async throws -> Photo {
         captureCount += 1

@@ -105,6 +105,17 @@ struct CameraCaptureView: View {
                     .padding(.bottom, 16)
             }
             .overlay {
+                if let countdown = viewModel.captureCountdown {
+                    Text(countdown.formatted())
+                        .font(.system(size: 96, weight: .semibold, design: .rounded))
+                        .foregroundStyle(.white)
+                        .contentTransition(.numericText(countsDown: true))
+                        .shadow(color: .black.opacity(0.65), radius: 8)
+                        .allowsHitTesting(false)
+                        .accessibilityLabel("Photo in \(countdown) seconds")
+                }
+            }
+            .overlay {
                 if let displayedCapturePreview {
                     CapturedPhotoTransitionView(
                         preview: displayedCapturePreview,

@@ -24,6 +24,21 @@ struct CameraSettingsView: View {
                     settingsLink("Image Format", value: viewModel.controls.settings.photoOutputFormat.displayName) {
                         PhotoFormatSettingsView(viewModel: viewModel)
                     }
+                    settingsLink(
+                        "Photo Resolution",
+                        value: selectedPhotoResolutionName
+                    ) {
+                        PhotoResolutionSettingsView(viewModel: viewModel)
+                    }
+                    settingsLink("Timer", value: viewModel.controls.settings.photoTimer.displayName) {
+                        PhotoTimerSettingsView(controls: viewModel.controls)
+                    }
+                    settingsLink(
+                        "Content-Aware Correction",
+                        value: viewModel.controls.settings.contentAwareCorrection.displayName
+                    ) {
+                        ContentAwareCorrectionSettingsView(controls: viewModel.controls)
+                    }
                 }
 
                 Section("Presets") {
@@ -58,6 +73,13 @@ struct CameraSettingsView: View {
                 }
             }
         }
+    }
+
+    private var selectedPhotoResolutionName: String {
+        guard let selected = viewModel.controls.settings.photoResolution else {
+            return "Unavailable"
+        }
+        return selected.megapixelDisplayName
     }
 
     private func settingsLink<Destination: View>(
@@ -371,6 +393,74 @@ private struct PhotoFormatSettingsView: View {
     }
 }
 
+private struct PhotoResolutionSettingsView: View {
+    let viewModel: CameraViewModel
+
+    var body: some View {
+        List {
+            Section {
+                ForEach(viewModel.availablePhotoResolutions, id: \.self) { resolution in
+                    selectionButton(
+                        resolution.megapixelDisplayName,
+                        selected: resolution == viewModel.controls.settings.photoResolution
+                    ) {
+                        viewModel.controls.setPhotoResolution(resolution)
+                    }
+                }
+            } footer: {
+                Text("The selected resolution is a maximum. The captured photo may use a lower resolution depending on the selected lens, lighting conditions, flash, and capture format.")
+            }
+        }
+        .navigationTitle("Photo Resolution")
+        .navigationBarTitleDisplayMode(.inline)
+    }
+}
+
+private struct PhotoTimerSettingsView: View {
+    let controls: CameraControlsController
+
+    var body: some View {
+        SelectionList(
+            title: "Timer",
+            values: PhotoTimer.allCases,
+            selected: controls.settings.photoTimer,
+            label: \PhotoTimer.displayName,
+            select: controls.setPhotoTimer
+        )
+    }
+}
+
+private struct ContentAwareCorrectionSettingsView: View {
+    let controls: CameraControlsController
+
+    var body: some View {
+        List {
+            Section {
+                ForEach(ContentAwareCorrection.allCases, id: \.self) { correction in
+                    selectionButton(
+                        correction.displayName,
+                        selected: correction == controls.settings.contentAwareCorrection
+                    ) {
+                        controls.setContentAwareCorrection(correction)
+                    }
+                    .disabled(
+                        correction == .automatic
+                        && !controls.supportsContentAwareCorrection
+                    )
+                }
+            } footer: {
+                if controls.supportsContentAwareCorrection {
+                    Text("Automatically corrects distortion around important subjects, such as faces near the edges. The final framing may differ slightly from the preview. This correction isn't applied to RAW photos.")
+                } else {
+                    Text("Content-aware correction isn't available for the selected camera configuration.")
+                }
+            }
+        }
+        .navigationTitle("Content-Aware Correction")
+        .navigationBarTitleDisplayMode(.inline)
+    }
+}
+
 private struct SelectionList<Value: Hashable>: View {
     let title: String
     let values: [Value]
@@ -491,4 +581,25 @@ extension PhotoOutputFormat {
         }
     }
 
+}
+
+extension PhotoResolution {
+    var megapixelDisplayName: String {
+        "\(Int(megapixels.rounded(.down))) MP"
+    }
+}
+
+extension PhotoTimer {
+    var displayName: String {
+        self == .off ? "Off" : "\(rawValue) s"
+    }
+}
+
+extension ContentAwareCorrection {
+    var displayName: String {
+        switch self {
+        case .off: "Off"
+        case .automatic: "Automatic"
+        }
+    }
 }

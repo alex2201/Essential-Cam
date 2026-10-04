@@ -12,6 +12,8 @@ protocol PhotoCapturing: Sendable {
         flashMode: CameraFlashMode,
         aspectRatio: CameraAspectRatio,
         outputFormat: PhotoOutputFormat,
+        resolution: PhotoResolution?,
+        contentAwareCorrection: ContentAwareCorrection,
         previewHandler: @escaping @Sendable (CGImage) -> Void
     ) async throws -> Photo
 }
@@ -29,12 +31,16 @@ struct PhotoCaptureUseCase {
         flashMode: CameraFlashMode,
         aspectRatio: CameraAspectRatio,
         outputFormat: PhotoOutputFormat,
+        resolution: PhotoResolution? = nil,
+        contentAwareCorrection: ContentAwareCorrection = .off,
         previewHandler: @escaping @Sendable (CGImage) -> Void = { _ in }
     ) async throws -> Photo {
         let photo = try await photoCapture.capturePhoto(
             flashMode: flashMode,
             aspectRatio: aspectRatio,
             outputFormat: outputFormat,
+            resolution: resolution,
+            contentAwareCorrection: contentAwareCorrection,
             previewHandler: previewHandler
         )
         try await photoSaving.save(photo)

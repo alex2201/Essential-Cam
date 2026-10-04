@@ -16,6 +16,73 @@ struct CameraSettings: Codable, Equatable, Sendable {
     var aspectRatio: CameraAspectRatio
     var flashMode: CameraFlashMode
     var photoOutputFormat: PhotoOutputFormat = .heif
+    var photoResolution: PhotoResolution?
+    var photoTimer: PhotoTimer = .off
+    var contentAwareCorrection: ContentAwareCorrection = .off
+
+    private enum CodingKeys: String, CodingKey {
+        case exposure
+        case focus
+        case whiteBalance
+        case zoomFactor
+        case captureMode
+        case aspectRatio
+        case flashMode
+        case photoOutputFormat
+        case photoResolution
+        case photoTimer
+        case contentAwareCorrection
+    }
+
+    init(
+        exposure: ExposureSetting,
+        focus: FocusSetting,
+        whiteBalance: WhiteBalanceSetting,
+        zoomFactor: Double,
+        captureMode: CaptureMode,
+        aspectRatio: CameraAspectRatio,
+        flashMode: CameraFlashMode,
+        photoOutputFormat: PhotoOutputFormat = .heif,
+        photoResolution: PhotoResolution? = nil,
+        photoTimer: PhotoTimer = .off,
+        contentAwareCorrection: ContentAwareCorrection = .off
+    ) {
+        self.exposure = exposure
+        self.focus = focus
+        self.whiteBalance = whiteBalance
+        self.zoomFactor = zoomFactor
+        self.captureMode = captureMode
+        self.aspectRatio = aspectRatio
+        self.flashMode = flashMode
+        self.photoOutputFormat = photoOutputFormat
+        self.photoResolution = photoResolution
+        self.photoTimer = photoTimer
+        self.contentAwareCorrection = contentAwareCorrection
+    }
+
+    init(from decoder: any Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        exposure = try container.decode(ExposureSetting.self, forKey: .exposure)
+        focus = try container.decode(FocusSetting.self, forKey: .focus)
+        whiteBalance = try container.decode(WhiteBalanceSetting.self, forKey: .whiteBalance)
+        zoomFactor = try container.decode(Double.self, forKey: .zoomFactor)
+        captureMode = try container.decode(CaptureMode.self, forKey: .captureMode)
+        aspectRatio = try container.decode(CameraAspectRatio.self, forKey: .aspectRatio)
+        flashMode = try container.decode(CameraFlashMode.self, forKey: .flashMode)
+        photoOutputFormat = try container.decodeIfPresent(
+            PhotoOutputFormat.self,
+            forKey: .photoOutputFormat
+        ) ?? .heif
+        photoResolution = try container.decodeIfPresent(
+            PhotoResolution.self,
+            forKey: .photoResolution
+        )
+        photoTimer = try container.decodeIfPresent(PhotoTimer.self, forKey: .photoTimer) ?? .off
+        contentAwareCorrection = try container.decodeIfPresent(
+            ContentAwareCorrection.self,
+            forKey: .contentAwareCorrection
+        ) ?? .off
+    }
 }
 
 extension CameraSettings {
@@ -27,7 +94,10 @@ extension CameraSettings {
         captureMode: .photo,
         aspectRatio: .fourByThree,
         flashMode: .off,
-        photoOutputFormat: .heif
+        photoOutputFormat: .heif,
+        photoResolution: nil,
+        photoTimer: .off,
+        contentAwareCorrection: .off
     )
 }
 
@@ -91,4 +161,29 @@ enum PhotoOutputFormat: String, Codable, Equatable, Sendable, CaseIterable {
     var isRAW: Bool {
         self == .raw || self == .appleProRAW
     }
+}
+
+struct PhotoResolution: Codable, Equatable, Hashable, Sendable {
+    let width: Int32
+    let height: Int32
+
+    var megapixels: Double {
+        Double(width) * Double(height) / 1_000_000
+    }
+}
+
+enum PhotoTimer: Int, Codable, Equatable, Sendable, CaseIterable {
+    case off = 0
+    case threeSeconds = 3
+    case fiveSeconds = 5
+    case tenSeconds = 10
+
+    var duration: Duration {
+        .seconds(rawValue)
+    }
+}
+
+enum ContentAwareCorrection: String, Codable, Equatable, Sendable, CaseIterable {
+    case off
+    case automatic
 }

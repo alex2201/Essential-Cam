@@ -43,6 +43,8 @@ actor PhotoCaptureCoordinator: PhotoCaptureCoordinating {
                 flashMode: settings.flashMode,
                 aspectRatio: settings.aspectRatio,
                 outputFormat: settings.photoOutputFormat,
+                resolution: settings.photoResolution,
+                contentAwareCorrection: settings.contentAwareCorrection,
                 previewHandler: { _ in }
             )
         } catch {

@@ -10,6 +10,8 @@ import SwiftUI
 struct QuickAccessControlsView: View {
     let controls: CameraControlsController
     let showAspectRatioSelector: () -> Void
+    let showPhotoTimerSelector: () -> Void
+    let showPhotoResolutionSelector: () -> Void
     let showExposureEditor: () -> Void
     let showFocusEditor: () -> Void
     let showWhiteBalanceEditor: () -> Void
@@ -37,6 +39,24 @@ struct QuickAccessControlsView: View {
             .buttonStyle(.plain)
             .accessibilityLabel("Choose aspect ratio")
             .accessibilityValue(controls.settings.aspectRatio.accessibilityName)
+
+            separator
+
+            quickSettingButton(
+                icon: "timer",
+                value: controls.settings.photoTimer.displayName,
+                accessibilityLabel: "Choose photo timer",
+                action: showPhotoTimerSelector
+            )
+
+            separator
+
+            quickSettingButton(
+                icon: "photo",
+                value: controls.settings.photoResolution?.megapixelDisplayName ?? "Auto",
+                accessibilityLabel: "Choose photo resolution",
+                action: showPhotoResolutionSelector
+            )
 
             separator
 
@@ -92,6 +112,80 @@ struct QuickAccessControlsView: View {
             .padding(.horizontal, 8)
     }
 
+    private func quickSettingButton(
+        icon: String,
+        value: String,
+        accessibilityLabel: String,
+        action: @escaping () -> Void
+    ) -> some View {
+        Button(action: action) {
+            VStack(spacing: 4) {
+                Image(systemName: icon)
+                    .font(.system(size: 16, weight: .semibold))
+                Text(value)
+                    .font(.system(size: 10))
+                    .foregroundStyle(.white.opacity(0.78))
+            }
+            .frame(maxWidth: .infinity)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(accessibilityLabel)
+        .accessibilityValue(value)
+    }
+}
+
+struct QuickSettingSelectionView<Value: Hashable>: View {
+    let title: String
+    let icon: String
+    let values: [Value]
+    let selectedValue: Value?
+    let label: (Value) -> String
+    let select: (Value) -> Void
+    let dismiss: () -> Void
+
+    var body: some View {
+        VStack(spacing: 12) {
+            VStack(spacing: 0) {
+                Image(systemName: icon)
+                    .font(.system(size: 16, weight: .semibold))
+                    .foregroundStyle(.white)
+                    .frame(width: 60, height: 40)
+                    .accessibilityHidden(true)
+
+                ForEach(values, id: \.self) { value in
+                    Rectangle()
+                        .fill(.white.opacity(0.35))
+                        .frame(width: 40, height: 1)
+                    Button {
+                        select(value)
+                    } label: {
+                        Text(label(value))
+                            .font(.system(size: 13, weight: .semibold, design: .rounded))
+                            .foregroundStyle(value == selectedValue ? Color.yellow : Color.white)
+                            .frame(width: 60, height: 44)
+                            .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityAddTraits(value == selectedValue ? .isSelected : [])
+                }
+            }
+            .cameraControlBackground(cornerRadius: 12)
+            .accessibilityLabel(title)
+
+            Button(action: dismiss) {
+                Image(systemName: "xmark")
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(.white)
+                    .frame(width: 36, height: 36)
+                    .contentShape(Circle())
+            }
+            .buttonStyle(.plain)
+            .cameraControlCircleBackground()
+            .accessibilityLabel("Close \(title) selection")
+        }
+        .padding(.horizontal, 8)
+    }
 }
 
 struct AspectRatioSelectionView: View {

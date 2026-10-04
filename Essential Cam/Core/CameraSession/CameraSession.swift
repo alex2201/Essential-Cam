@@ -120,6 +120,21 @@ actor CameraSession {
         photoCaptureService.availablePhotoOutputFormats()
     }
 
+    func availablePhotoResolutions() -> [PhotoResolution] {
+        let resolutions = selectedCameraDevices.compactMap { device in
+            device.formats
+                .flatMap(\.supportedMaxPhotoDimensions)
+                .map { PhotoResolution(width: $0.width, height: $0.height) }
+                .max { $0.megapixels < $1.megapixels }
+        }
+
+        return Array(Set(resolutions)).sorted { $0.megapixels < $1.megapixels }
+    }
+
+    func supportsContentAwareCorrection() -> Bool {
+        photoCaptureService.supportsContentAwareCorrection()
+    }
+
     func exposureCapabilities() -> CameraExposureCapabilities? {
         guard let device = activeVideoInput?.device else { return nil }
 
@@ -589,6 +604,8 @@ extension CameraSession: PhotoCapturing {
         flashMode: CameraFlashMode,
         aspectRatio: CameraAspectRatio,
         outputFormat: PhotoOutputFormat,
+        resolution: PhotoResolution?,
+        contentAwareCorrection: ContentAwareCorrection,
         previewHandler: @escaping @Sendable (CGImage) -> Void
     ) async throws -> Photo {
         guard !isCapturingPhoto else {
@@ -609,6 +626,8 @@ extension CameraSession: PhotoCapturing {
             flashMode: supportedFlashMode,
             aspectRatio: aspectRatio,
             outputFormat: outputFormat,
+            resolution: resolution,
+            contentAwareCorrection: contentAwareCorrection,
             previewHandler: previewHandler
         )
     }

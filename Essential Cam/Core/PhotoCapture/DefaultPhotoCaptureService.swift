@@ -23,6 +23,7 @@ final class DefaultPhotoCaptureService: PhotoCaptureService {
 
     private let photoOutput = AVCapturePhotoOutput()
     private var activeCaptureDelegate: PhotoCaptureDelegate?
+    private var supportedResolutions: [PhotoResolution] = []
 
     func supportsFlashMode(_ flashMode: CameraFlashMode) -> Bool {
         photoOutput.supportedFlashModes.contains(flashMode.avFoundationValue)
@@ -30,6 +31,26 @@ final class DefaultPhotoCaptureService: PhotoCaptureService {
 
     func updateConfiguration(for device: AVCaptureDevice) {
         photoOutput.isAppleProRAWEnabled = photoOutput.isAppleProRAWSupported
+        photoOutput.isContentAwareDistortionCorrectionEnabled =
+            photoOutput.isContentAwareDistortionCorrectionSupported
+        supportedResolutions = device.activeFormat.supportedMaxPhotoDimensions
+            .map { PhotoResolution(width: $0.width, height: $0.height) }
+            .sorted { $0.megapixels < $1.megapixels }
+
+        if let largestResolution = supportedResolutions.last {
+            photoOutput.maxPhotoDimensions = CMVideoDimensions(
+                width: largestResolution.width,
+                height: largestResolution.height
+            )
+        }
+    }
+
+    func availablePhotoResolutions() -> [PhotoResolution] {
+        supportedResolutions
+    }
+
+    func supportsContentAwareCorrection() -> Bool {
+        photoOutput.isContentAwareDistortionCorrectionSupported
     }
 
     func availablePhotoOutputFormats() -> [PhotoOutputFormat] {
@@ -68,6 +89,8 @@ final class DefaultPhotoCaptureService: PhotoCaptureService {
         flashMode: CameraFlashMode,
         aspectRatio: CameraAspectRatio,
         outputFormat: PhotoOutputFormat,
+        resolution: PhotoResolution?,
+        contentAwareCorrection: ContentAwareCorrection,
         previewHandler: @escaping @Sendable (CGImage) -> Void
     ) async throws -> Photo {
         defer { activeCaptureDelegate = nil }
@@ -75,7 +98,9 @@ final class DefaultPhotoCaptureService: PhotoCaptureService {
         return try await withCheckedThrowingContinuation { continuation in
             guard let photoSettings = createPhotoSettings(
                 flashMode: flashMode,
-                outputFormat: outputFormat
+                outputFormat: outputFormat,
+                resolution: resolution,
+                contentAwareCorrection: contentAwareCorrection
             ) else {
                 continuation.resume(throwing: PhotoCaptureError.photoProcessingFailed)
                 return
@@ -94,7 +119,9 @@ final class DefaultPhotoCaptureService: PhotoCaptureService {
 
     private func createPhotoSettings(
         flashMode: CameraFlashMode,
-        outputFormat: PhotoOutputFormat
+        outputFormat: PhotoOutputFormat,
+        resolution: PhotoResolution?,
+        contentAwareCorrection: ContentAwareCorrection
     ) -> AVCapturePhotoSettings? {
         let photoSettings: AVCapturePhotoSettings
 
@@ -129,7 +156,19 @@ final class DefaultPhotoCaptureService: PhotoCaptureService {
             photoSettings.previewPhotoFormat = [kCVPixelBufferPixelFormatTypeKey as String: previewPhotoPixelFormatType]
         }
 
-        photoSettings.maxPhotoDimensions = photoOutput.maxPhotoDimensions
+        let supportedResolution = resolution.flatMap { requested in
+            supportedResolutions.first(where: { $0 == requested })
+        } ?? supportedResolutions.last
+        if let supportedResolution {
+            photoSettings.maxPhotoDimensions = CMVideoDimensions(
+                width: supportedResolution.width,
+                height: supportedResolution.height
+            )
+        }
+        photoSettings.isAutoContentAwareDistortionCorrectionEnabled =
+            contentAwareCorrection == .automatic
+            && !outputFormat.isRAW
+            && photoOutput.isContentAwareDistortionCorrectionEnabled
         if photoOutput.supportedFlashModes.contains(flashMode.avFoundationValue) {
             photoSettings.flashMode = flashMode.avFoundationValue
         }
