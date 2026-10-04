@@ -1,3 +1,10 @@
+//
+//  Essential_CamApp.swift
+//  Essential Cam
+//
+//  Created by Alexander López.
+//
+
 import SwiftUI
 
 @main
@@ -7,6 +14,8 @@ struct Essential_CamApp: App {
     @State private var quickSettingsStore = QuickSettingsStore()
     @State private var presetStore = CameraPresetStore()
     @State private var isApplicationLoaded = false
+    @State private var isPreparingApplication = false
+    @State private var storageWarning: StartupStorageWarning?
     @AppStorage("hasCompletedOnboarding") private var hasCompletedOnboarding = false
 
     var body: some Scene {
@@ -22,12 +31,23 @@ struct Essential_CamApp: App {
                     }
                 } else {
                     ApplicationLoadingView()
+                        .alert(item: $storageWarning) { warning in
+                            Alert(
+                                title: Text(warning.title),
+                                message: Text(warning.message),
+                                dismissButton: .default(Text("Continue")) {
+                                    isApplicationLoaded = true
+                                }
+                            )
+                        }
                 }
             }
             .environment(presetStore)
             .environment(quickSettingsStore)
             .task {
-                guard !isApplicationLoaded else { return }
+                guard !isApplicationLoaded, !isPreparingApplication, storageWarning == nil else { return }
+                isPreparingApplication = true
+                defer { isPreparingApplication = false }
                 let loadApplication = LoadApplicationUseCase(
                     loadQuickSettings: LoadQuickSettingsUseCase(
                         store: quickSettingsStore,
@@ -36,7 +56,11 @@ struct Essential_CamApp: App {
                     presetStore: presetStore
                 )
                 await loadApplication.execute()
-                isApplicationLoaded = true
+                guard !Task.isCancelled else { return }
+                let result = await CheckStorageUseCase(storage: DefaultStorageCapacity()).execute()
+                guard !Task.isCancelled else { return }
+                storageWarning = StartupStorageWarning(result: result)
+                isApplicationLoaded = storageWarning == nil
             }
         }
     }

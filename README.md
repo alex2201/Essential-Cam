@@ -11,6 +11,7 @@ The project focuses on capturing clean, editing-ready photos with Apple's camera
 - Basic 1080p/30 fps SDR video recording with microphone audio
 - Video thumbnails with a play overlay and in-app playback
 - Retry or discard recordings when saving to Photos fails
+- Startup storage check with a low-space warning for photos and videos
 - Quick preview after each capture
 - Physical and virtual lens selection
 - Automatic exposure with exposure compensation
@@ -49,6 +50,15 @@ Firebase Analytics and Crashlytics are integrated through Swift Package Manager.
    before building; do not commit the file or its API key.
 6. Build and run the app.
 7. Allow Camera and Photo Library access when prompted.
+
+At each app launch, Essential Cam checks available local storage before opening
+the camera or onboarding. If less than 1 GB is available, an alert shows the
+remaining space and warns that photos and videos may fail to save or recording
+may stop early. Free up space in **Settings > General > iPhone Storage**, or tap
+**Continue** to proceed. If storage cannot be checked, the app shows a separate
+notice and still allows continuing. The 1 GB threshold is a preventive warning,
+not a guarantee that a photo or recording will fit; media size and recording
+duration determine the space needed.
 
 Switching to Video checks camera, microphone, and permission to add media to the
 Photo Library, requesting undecided permissions in that order. If access is

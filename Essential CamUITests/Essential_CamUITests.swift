@@ -295,6 +295,45 @@ final class Essential_CamUITests: XCTestCase {
     }
 
     @MainActor
+    func testStartupStorageWarningsAllowContinuingBeforeOnboarding() throws {
+        let app = XCUIApplication()
+        app.launchArguments = [
+            "-hasCompletedOnboarding", "NO",
+            "-storageCapacityForTesting", "500000000",
+            "-UIPreferredContentSizeCategoryName", "UICTContentSizeCategoryAccessibilityXXXL"
+        ]
+        defer { XCUIDevice.shared.orientation = .portrait }
+        for orientation in [UIDeviceOrientation.portrait, .landscapeLeft] {
+            XCUIDevice.shared.orientation = orientation
+            app.launch()
+            let warning = app.alerts["Low Storage"]
+            XCTAssertTrue(warning.waitForExistence(timeout: 10))
+            XCTAssertTrue(warning.staticTexts.matching(NSPredicate(format: "label CONTAINS %@", "500 MB")).firstMatch.exists)
+            XCTAssertFalse(app.staticTexts["Welcome to Essential Cam"].exists)
+            XCTAssertTrue(warning.buttons["Continue"].isHittable)
+            warning.buttons["Continue"].tap()
+            XCTAssertTrue(app.staticTexts["Welcome to Essential Cam"].waitForExistence(timeout: 5))
+            XCTAssertFalse(warning.exists)
+            app.terminate()
+        }
+        app.launchArguments = ["-hasCompletedOnboarding", "NO", "-storageCapacityForTesting", "unavailable"]
+        app.launch()
+        let unavailable = app.alerts["Storage Check Unavailable"]
+        XCTAssertTrue(unavailable.waitForExistence(timeout: 10))
+        unavailable.buttons["Continue"].tap()
+        XCTAssertTrue(app.staticTexts["Welcome to Essential Cam"].waitForExistence(timeout: 5))
+    }
+
+    @MainActor
+    func testSufficientStartupStorageDoesNotWarn() throws {
+        let app = XCUIApplication()
+        app.launchArguments = ["-hasCompletedOnboarding", "NO", "-storageCapacityForTesting", "1000000000"]
+        app.launch()
+        XCTAssertTrue(app.staticTexts["Welcome to Essential Cam"].waitForExistence(timeout: 10))
+        XCTAssertFalse(app.alerts.firstMatch.exists)
+    }
+
+    @MainActor
     func testLaunchPerformance() throws {
         // This measures how long it takes to launch your application.
         measure(metrics: [XCTApplicationLaunchMetric()]) {
