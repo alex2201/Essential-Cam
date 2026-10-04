@@ -34,9 +34,23 @@
 		BD281D153046B2290016BB59 /* Essential CamUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = "Essential CamUITests.xctest"; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
+/* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
+		BDE468783072E27B00DAB484 /* Exceptions for "Essential Cam" folder in "Essential Cam" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				"Firebase/GoogleService-Info-Dev.plist",
+				"Firebase/GoogleService-Info-Prod.plist",
+			);
+			target = BD281CFD3046B2280016BB59 /* Essential Cam */;
+		};
+/* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
+
 /* Begin PBXFileSystemSynchronizedRootGroup section */
 		BD281D003046B2280016BB59 /* Essential Cam */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				BDE468783072E27B00DAB484 /* Exceptions for "Essential Cam" folder in "Essential Cam" target */,
+			);
 			path = "Essential Cam";
 			sourceTree = "<group>";
 		};
@@ -109,6 +123,7 @@
 				BD281CFA3046B2280016BB59 /* Sources */,
 				BD281CFB3046B2280016BB59 /* Frameworks */,
 				BD281CFC3046B2280016BB59 /* Resources */,
+				BDE468793072E2A500DAB484 /* Configure Firebase Environment */,
 				BDE466F83072D2EC00DAB484 /* Firebase Crashlytics */,
 			);
 			buildRules = (
@@ -268,6 +283,27 @@
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
 			shellScript = "\"${BUILD_DIR%/Build/*}/SourcePackages/checkouts/firebase-ios-sdk/Crashlytics/run\"\n";
+		};
+		BDE468793072E2A500DAB484 /* Configure Firebase Environment */ = {
+			isa = PBXShellScriptBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+			);
+			inputPaths = (
+				"$(PROJECT_DIR)/Essential Cam/Firebase/GoogleService-Info-Dev.plist",
+				"$(PROJECT_DIR)/Essential Cam/Firebase/GoogleService-Info-Prod.plist",
+			);
+			name = "Configure Firebase Environment";
+			outputFileListPaths = (
+			);
+			outputPaths = (
+				"$(TARGET_BUILD_DIR)/$(UNLOCALIZED_RESOURCES_FOLDER_PATH)/GoogleService-Info.plist",
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "if [ \"${CONFIGURATION}\" = \"Debug\" ]; then\n    FIREBASE_PLIST=\"${PROJECT_DIR}/Essential Cam/Firebase/GoogleService-Info-Dev.plist\"\nelse\n    FIREBASE_PLIST=\"${PROJECT_DIR}/Essential Cam/Firebase/GoogleService-Info-Prod.plist\"\nfi\n\necho \"Using Firebase configuration: ${FIREBASE_PLIST}\"\n\ncp \"${FIREBASE_PLIST}\" \\\n   \"${TARGET_BUILD_DIR}/${UNLOCALIZED_RESOURCES_FOLDER_PATH}/GoogleService-Info.plist\"\n";
 		};
 /* End PBXShellScriptBuildPhase section */
 
