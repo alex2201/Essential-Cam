@@ -7,12 +7,19 @@ struct Essential_CamApp: App {
     @State private var quickSettingsStore = QuickSettingsStore()
     @State private var presetStore = CameraPresetStore()
     @State private var isApplicationLoaded = false
+    @AppStorage("hasCompletedOnboarding") private var hasCompletedOnboarding = false
 
     var body: some Scene {
         WindowGroup {
             Group {
                 if isApplicationLoaded {
-                    CameraView()
+                    if hasCompletedOnboarding {
+                        CameraView()
+                    } else {
+                        OnboardingView {
+                            hasCompletedOnboarding = true
+                        }
+                    }
                 } else {
                     ApplicationLoadingView()
                 }
