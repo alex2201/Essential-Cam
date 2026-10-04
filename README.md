@@ -25,7 +25,7 @@ The project focuses on capturing clean, editing-ready photos with Apple's camera
 - iOS 18.6 or later
 - An iPhone for camera capture and accurate hardware testing
 
-The app has no third-party dependencies.
+Firebase Analytics and Crashlytics are integrated through Swift Package Manager.
 
 ## Getting started
 
@@ -39,8 +39,13 @@ The app has no third-party dependencies.
 2. Open `Essential Cam.xcodeproj` in Xcode.
 3. Select the **Essential Cam** scheme and an iPhone as the run destination.
 4. Choose your development team under **Signing & Capabilities** if required.
-5. Build and run the app.
-6. Allow Camera and Photo Library access when prompted.
+5. Download `GoogleService-Info.plist` for the iOS app with bundle identifier
+   `com.alexanderlopez.Essential-Cam` from your Firebase project settings and place
+   it in `Essential Cam/GoogleService-Info.plist`. This local file is ignored by
+   Git and is required for Firebase initialization. In CI, supply it securely
+   before building; do not commit the file or its API key.
+6. Build and run the app.
+7. Allow Camera and Photo Library access when prompted.
 
 Switching to Video checks camera, microphone, and permission to add media to the
 Photo Library, requesting undecided permissions in that order. If access is
