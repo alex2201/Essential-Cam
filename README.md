@@ -49,8 +49,9 @@ The codebase separates camera infrastructure, domain models, and SwiftUI present
 
 ```text
 Essential Cam/
+├── Application/    SwiftUI app entry point and application delegate
 ├── Core/           AVFoundation services, device discovery, capture, and persistence
-├── Domain/         Camera models and photo-capture use cases
+├── Domain/         Camera models, repository contracts, and use cases
 └── Presentation/   SwiftUI views, view models, preview, and camera controls
 ```
 

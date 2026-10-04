@@ -2,6 +2,8 @@ import SwiftUI
 
 @main
 struct Essential_CamApp: App {
+    @UIApplicationDelegateAdaptor(AppDelegate.self) var delegate
+
     @State private var quickSettingsStore = QuickSettingsStore()
     @State private var presetStore = CameraPresetStore()
     @State private var isApplicationLoaded = false
