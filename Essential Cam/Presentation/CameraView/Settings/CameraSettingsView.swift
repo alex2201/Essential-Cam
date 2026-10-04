@@ -1,3 +1,10 @@
+//
+//  CameraSettingsView.swift
+//  Essential Cam
+//
+//  Created by Alexander López.
+//
+
 import SwiftUI
 
 struct CameraSettingsView: View {
@@ -68,6 +75,12 @@ struct CameraSettingsView: View {
                     }
                     settingsLink("Camera", value: viewModel.selectedCamera?.position.settingsDisplayName ?? "Unavailable") {
                         CameraPositionSettingsView(viewModel: viewModel)
+                    }
+                }
+
+                Section {
+                    NavigationLink("Feedback") {
+                        FeedbackView()
                     }
                 }
             }

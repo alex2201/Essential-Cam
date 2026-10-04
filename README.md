@@ -29,7 +29,8 @@ The project focuses on capturing clean, editing-ready photos with Apple's camera
 - iOS 18.6 or later
 - An iPhone for camera capture and accurate hardware testing
 
-Firebase Analytics and Crashlytics are integrated through Swift Package Manager.
+Firebase Analytics, Crashlytics, and Authentication are integrated through Swift
+Package Manager. Feedback is saved to Cloud Firestore through its REST API.
 
 ## Getting started
 
@@ -54,6 +55,29 @@ Firebase Analytics and Crashlytics are integrated through Swift Package Manager.
    do not commit these files or their API keys.
 6. Build and run the app.
 7. Allow Camera and Photo Library access when prompted.
+
+### Feedback setup
+
+In **both** Firebase projects, enable **Authentication > Sign-in method >
+Anonymous** and create the default Cloud Firestore database. In **Firestore >
+Rules**, publish the feedback rules in `Firebase/firestore.rules`. Merge the
+`feedbacks` match into existing rules if the database serves other features;
+remove any overlapping broad rule that grants public access to feedback.
+
+Settings > Feedback sends one document to `feedbacks` with exactly `message`,
+`createdAt` (server timestamp), `appVersion`, and `buildNumber`. Debug uses the
+development project and Release uses production. No login screen is required,
+and no user ID is stored in feedback documents. Only authenticated creates are
+allowed; client reads, updates, and deletes are blocked.
+
+The form rejects blank or oversized messages (5,000 UTF-8 bytes), prevents
+simultaneous submissions, and clears the message only after server confirmation.
+Failed submissions retain the draft and reuse its document ID on retry, without
+overwriting an accepted document or its creation date. The draft is held only
+while this screen remains open; leaving it or terminating the app discards it.
+Firestore requests time out after 30 seconds and aren't queued for offline
+delivery. Authentication may take additional time. App Check enforcement is not
+configured by this change; review abuse protection before a public rollout.
 
 At each app launch, Essential Cam checks available local storage before opening
 the camera or onboarding. If less than 1 GB is available, an alert shows the

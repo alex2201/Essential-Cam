@@ -9,6 +9,7 @@
 /* Begin PBXBuildFile section */
 		BDE466F53072D03600DAB484 /* FirebaseAnalytics in Frameworks */ = {isa = PBXBuildFile; productRef = BDE466F43072D03600DAB484 /* FirebaseAnalytics */; };
 		BDE466F73072D03600DAB484 /* FirebaseCrashlytics in Frameworks */ = {isa = PBXBuildFile; productRef = BDE466F63072D03600DAB484 /* FirebaseCrashlytics */; };
+		FEED00013073D03600DAB484 /* FirebaseAuth in Frameworks */ = {isa = PBXBuildFile; productRef = FEED00023073D03600DAB484 /* FirebaseAuth */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -73,6 +74,7 @@
 			files = (
 				BDE466F53072D03600DAB484 /* FirebaseAnalytics in Frameworks */,
 				BDE466F73072D03600DAB484 /* FirebaseCrashlytics in Frameworks */,
+				FEED00013073D03600DAB484 /* FirebaseAuth in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -137,6 +139,7 @@
 			packageProductDependencies = (
 				BDE466F43072D03600DAB484 /* FirebaseAnalytics */,
 				BDE466F63072D03600DAB484 /* FirebaseCrashlytics */,
+				FEED00023073D03600DAB484 /* FirebaseAuth */,
 			);
 			productName = "Essential Cam";
 			productReference = BD281CFE3046B2280016BB59 /* Essential Cam.app */;
@@ -766,6 +769,11 @@
 			isa = XCSwiftPackageProductDependency;
 			package = BDE466F33072D03600DAB484 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
 			productName = FirebaseCrashlytics;
+		};
+		FEED00023073D03600DAB484 /* FirebaseAuth */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = BDE466F33072D03600DAB484 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
+			productName = FirebaseAuth;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};

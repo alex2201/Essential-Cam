@@ -1,0 +1,21 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /feedbacks/{feedbackId} {
+      allow create: if request.auth != null
+        && request.resource.data.keys().hasAll(['message', 'createdAt', 'appVersion', 'buildNumber'])
+        && request.resource.data.keys().hasOnly(['message', 'createdAt', 'appVersion', 'buildNumber'])
+        && request.resource.data.message is string
+        && request.resource.data.message.size() > 0
+        && request.resource.data.message.size() <= 5000
+        && request.resource.data.createdAt == request.time
+        && request.resource.data.appVersion is string
+        && request.resource.data.appVersion.size() > 0
+        && request.resource.data.appVersion.size() <= 100
+        && request.resource.data.buildNumber is string
+        && request.resource.data.buildNumber.size() > 0
+        && request.resource.data.buildNumber.size() <= 100;
+      allow read, update, delete: if false;
+    }
+  }
+}
