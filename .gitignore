@@ -30,4 +30,5 @@ fastlane/screenshots/**/*.png
 fastlane/test_output/
 
 # Local Firebase configuration
-GoogleService-Info.plist
+GoogleService-Info*.plist
+/Essential Cam/Firebase/**/*.plist

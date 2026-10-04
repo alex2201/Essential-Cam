@@ -43,11 +43,15 @@ Firebase Analytics and Crashlytics are integrated through Swift Package Manager.
 2. Open `Essential Cam.xcodeproj` in Xcode.
 3. Select the **Essential Cam** scheme and an iPhone as the run destination.
 4. Choose your development team under **Signing & Capabilities** if required.
-5. Download `GoogleService-Info.plist` for the iOS app with bundle identifier
-   `com.alexanderlopez.Essential-Cam` from your Firebase project settings and place
-   it in `Essential Cam/GoogleService-Info.plist`. This local file is ignored by
-   Git and is required for Firebase initialization. In CI, supply it securely
-   before building; do not commit the file or its API key.
+5. Download the iOS `GoogleService-Info.plist` from each Firebase environment's
+   project settings. Save the development configuration as
+   `Essential Cam/Firebase/GoogleService-Info-Dev.plist` and the production
+   configuration as `Essential Cam/Firebase/GoogleService-Info-Prod.plist`.
+   Debug builds use the development file; other build configurations use the
+   production file. The build phase copies the selected configuration into the
+   app as `GoogleService-Info.plist`. Both local files are ignored by Git and
+   required by the build inputs. In CI, supply them securely before building;
+   do not commit these files or their API keys.
 6. Build and run the app.
 7. Allow Camera and Photo Library access when prompted.
 
