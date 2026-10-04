@@ -5,7 +5,9 @@
 //  Created by Alexander López on 04/09/26.
 //
 
+import Foundation
+
 protocol VideoCaptureService: CameraCaptureComponent {
-    func startRecording()
+    func record(to url: URL, didStart: @escaping @Sendable () -> Void) async throws
     func stopRecording()
 }

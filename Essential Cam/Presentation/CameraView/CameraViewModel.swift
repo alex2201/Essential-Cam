@@ -8,6 +8,7 @@
 @preconcurrency import AVFoundation
 import Foundation
 import OSLog
+import UIKit
 
 @MainActor
 @Observable
@@ -27,6 +28,8 @@ final class CameraViewModel {
     private(set) var availablePhotoOutputFormats: [PhotoOutputFormat] = []
     private(set) var availablePhotoResolutions: [PhotoResolution] = []
     private(set) var hasPendingPhoto = false
+    private(set) var hasPendingVideo = false
+    private(set) var recordingStartedAt: Date?
     private(set) var captureCountdown: Int?
     private(set) var selectedCaptureMode: CaptureMode = .photo
     private(set) var isCheckingVideoPermissions = false
@@ -55,6 +58,11 @@ final class CameraViewModel {
     private let photoLibraryReader: any PhotoLibraryReading
     private let photoLibraryAuthorization: any PhotoLibraryAuthorizationProviding
     private let videoPermissions: any VideoPermissionsProviding
+    private let videoCoordinator: any VideoCaptureCoordinating
+    private var recordingTask: Task<Void, Never>?
+    private var activeRecordingID: UUID?
+    private var didRestorePendingVideo = false
+    private var videoBackgroundTask = UIBackgroundTaskIdentifier.invalid
     private let lifecycle = CameraLifecycleController()
     private var didRestorePendingPhoto = false
     private let logger = Logger(
@@ -71,7 +79,21 @@ final class CameraViewModel {
     }
 
     var isCameraInteractionDisabled: Bool {
-        operation != .none || cameraStatus != .running || hasPendingPhoto
+        operation != .none || cameraStatus != .running || hasPendingPhoto || hasPendingVideo
+    }
+
+    var isRecordingVideo: Bool { operation == .recordingVideo }
+
+    var isVideoCaptureInProgress: Bool {
+        switch operation {
+        case .startingVideo, .recordingVideo, .finishingVideo, .savingVideo: true
+        default: false
+        }
+    }
+
+    var isVideoRecordDisabled: Bool {
+        if isRecordingVideo { return false }
+        return isCameraInteractionDisabled || !videoPermissionsGranted || isCheckingVideoPermissions
     }
 
     // MARK: - Initialization
@@ -83,7 +105,8 @@ final class CameraViewModel {
         photoCoordinator: (any PhotoCaptureCoordinating)? = nil,
         photoLibraryReader: (any PhotoLibraryReading)? = nil,
         photoLibraryAuthorization: (any PhotoLibraryAuthorizationProviding)? = nil,
-        videoPermissions: any VideoPermissionsProviding = DefaultVideoPermissions()
+        videoPermissions: any VideoPermissionsProviding = DefaultVideoPermissions(),
+        videoCoordinator: (any VideoCaptureCoordinating)? = nil
     ) {
         self.cameraSession = cameraSession
         self.photoCoordinator = photoCoordinator ?? PhotoCaptureCoordinator(
@@ -94,6 +117,9 @@ final class CameraViewModel {
         self.photoLibraryReader = photoLibraryReader ?? photoLibrary
         self.photoLibraryAuthorization = photoLibraryAuthorization ?? photoLibrary
         self.videoPermissions = videoPermissions
+        self.videoCoordinator = videoCoordinator ?? VideoCaptureCoordinator(
+            recording: cameraSession, saving: photoLibrary, store: PendingVideoStore()
+        )
         controls = CameraControlsController(cameraSession: cameraSession)
     }
 
@@ -106,6 +132,7 @@ final class CameraViewModel {
     func start() async {
         startMonitoringSessionEventsIfNeeded()
         await restorePendingPhotoIfNeeded()
+        await restorePendingVideoIfNeeded()
         guard operation == .none else { return }
         operation = .starting
         cameraStatus = .starting
@@ -134,6 +161,15 @@ final class CameraViewModel {
     }
 
     func handleScenePhase(isActive: Bool, isBackground: Bool) async {
+        if isBackground, isVideoCaptureInProgress, videoBackgroundTask == .invalid {
+            videoBackgroundTask = UIApplication.shared.beginBackgroundTask(withName: "Finish video") { [weak self] in
+                Task { @MainActor in self?.endVideoBackgroundTask() }
+            }
+        }
+        if !isActive, isVideoCaptureInProgress {
+            if operation == .startingVideo { recordingTask?.cancel() }
+            stopVideoRecording()
+        }
         guard lifecycle.updateScene(isActive: isActive, isBackground: isBackground) else {
             controls.cancelPendingChanges()
             return
@@ -150,13 +186,14 @@ final class CameraViewModel {
         }
         await refreshRecentPhotoThumbnails()
         await presentPendingPhotoActionsIfNeeded()
-        if selectedCaptureMode == .video {
+        if hasPendingVideo { activeAlert = .videoSaveFailed }
+        if selectedCaptureMode == .video, operation == .none {
             await checkVideoPermissions()
         }
     }
 
     func selectCaptureMode(_ mode: CaptureMode) {
-        guard !isCheckingVideoPermissions, operation == .none else { return }
+        guard !isCheckingVideoPermissions, operation == .none, !hasPendingPhoto, !hasPendingVideo else { return }
         selectedCaptureMode = mode
         videoPermissionsGranted = false
         if case .videoPermissionRequired = activeAlert {
@@ -165,7 +202,7 @@ final class CameraViewModel {
     }
 
     func checkVideoPermissions(requestIfNeeded: Bool = true) async {
-        guard selectedCaptureMode == .video, !isCheckingVideoPermissions else { return }
+        guard selectedCaptureMode == .video, !isCheckingVideoPermissions, operation == .none else { return }
         isCheckingVideoPermissions = true
         videoPermissionsGranted = false
         defer { isCheckingVideoPermissions = false }
@@ -194,6 +231,121 @@ final class CameraViewModel {
         Task { await recoverCamera() }
     }
 
+    // MARK: - Video Capture
+
+    func recordVideoAction() {
+        if isRecordingVideo {
+            stopVideoRecording()
+            return
+        }
+#if targetEnvironment(simulator)
+        return
+#else
+        guard selectedCaptureMode == .video, !isVideoRecordDisabled, lifecycle.isSceneActive else { return }
+        operation = .startingVideo
+        let recordingID = UUID()
+        activeRecordingID = recordingID
+        controls.cancelPendingChanges()
+        recordingTask = Task { [self] in
+            defer {
+                recordingStartedAt = nil
+                endVideoBackgroundTask()
+                recordingTask = nil
+                activeRecordingID = nil
+                finishOperation()
+            }
+            do {
+                // Recheck authorization at the action boundary, including changes in Settings.
+                if let missing = try await CheckVideoPermissionsUseCase(permissions: videoPermissions)
+                    .execute(requestIfNeeded: false) {
+                    videoPermissionsGranted = false
+                    activeAlert = .videoPermissionRequired(missing)
+                    return
+                }
+                try Task.checkCancellation()
+                guard lifecycle.isSceneActive, cameraStatus == .running else { return }
+                try await videoCoordinator.record(didStart: { [weak self] in
+                    Task { @MainActor in
+                        guard let self, self.activeRecordingID == recordingID, self.operation == .startingVideo else { return }
+                        self.operation = .recordingVideo
+                        self.recordingStartedAt = .now
+                        if !self.lifecycle.isSceneActive { self.stopVideoRecording() }
+                    }
+                }, didFinish: { [weak self] in
+                    Task { @MainActor in
+                        guard let self, self.activeRecordingID == recordingID, self.isVideoCaptureInProgress else { return }
+                        self.operation = .savingVideo
+                        self.recordingStartedAt = nil
+                    }
+                })
+                hasPendingVideo = false
+                await refreshRecentPhotoThumbnails()
+            } catch is CancellationError {
+                // An interrupted start never begins another recording on foreground.
+            } catch {
+                hasPendingVideo = await videoCoordinator.hasPendingVideo()
+                if case VideoCaptureError.pendingStorageFailed = error { hasPendingVideo = true }
+                activeAlert = hasPendingVideo ? .videoSaveFailed : .videoRecordingFailed
+                logger.error("Video capture workflow failed")
+            }
+            await controls.synchronizeWithCamera()
+            await refreshPhotoOutputFormats()
+            await refreshPhotoResolutions()
+        }
+#endif
+    }
+
+    private func endVideoBackgroundTask() {
+        guard videoBackgroundTask != .invalid else { return }
+        UIApplication.shared.endBackgroundTask(videoBackgroundTask)
+        videoBackgroundTask = .invalid
+    }
+
+    private func stopVideoRecording() {
+        guard isVideoCaptureInProgress, operation != .finishingVideo, operation != .savingVideo else { return }
+        operation = .finishingVideo
+        Task { await cameraSession.stopVideoRecording() }
+    }
+
+    func retryPendingVideoSave() {
+        guard operation == .none, hasPendingVideo else { return }
+        operation = .savingVideo
+        activeAlert = nil
+        Task {
+            defer { finishOperation() }
+            do {
+                try await videoCoordinator.retrySave()
+                hasPendingVideo = false
+                await refreshRecentPhotoThumbnails()
+            } catch { activeAlert = .videoSaveFailed }
+        }
+    }
+
+    func discardPendingVideo() {
+        guard operation == .none, hasPendingVideo else { return }
+        operation = .savingVideo
+        activeAlert = nil
+        Task {
+            defer { finishOperation() }
+            do {
+                try await videoCoordinator.discard()
+                hasPendingVideo = false
+            } catch { activeAlert = .videoSaveFailed }
+        }
+    }
+
+    private func restorePendingVideoIfNeeded() async {
+        guard !didRestorePendingVideo else { return }
+        didRestorePendingVideo = true
+        do {
+            hasPendingVideo = try await videoCoordinator.restorePendingVideo()
+            if hasPendingVideo { activeAlert = .videoSaveFailed }
+        } catch {
+            hasPendingVideo = true
+            activeAlert = .videoSaveFailed
+        }
+    }
+
     // MARK: - Photo Capture
 
     func captureAction() {
@@ -202,7 +354,7 @@ final class CameraViewModel {
         // Photo capture requires camera hardware, so keep the shutter inert.
         return
 #else
-        guard operation == .none, cameraStatus == .running, !hasPendingPhoto else { return }
+        guard selectedCaptureMode == .photo, operation == .none, cameraStatus == .running, !hasPendingPhoto, !hasPendingVideo else { return }
         operation = .capturingPhoto
 
         Task { [self] in
@@ -393,6 +545,8 @@ final class CameraViewModel {
     private func handleSessionEvent(_ event: CameraSessionEvent) async {
         switch event {
         case let .interrupted(reason):
+            if operation == .startingVideo { recordingTask?.cancel() }
+            stopVideoRecording()
             // Background transitions already hide the app. Avoid replacing the
             // preview with an interruption message that lingers on foreground.
             if lifecycle.isSceneActive || reason != .appInactive {
@@ -402,8 +556,12 @@ final class CameraViewModel {
         case .interruptionEnded:
             scheduleForegroundHealthCheck()
         case .runtimeError(.mediaServicesWereReset):
+            if operation == .startingVideo { recordingTask?.cancel() }
+            stopVideoRecording()
             await requestRecovery(failure: .mediaServicesReset)
         case .runtimeError(.other):
+            if operation == .startingVideo { recordingTask?.cancel() }
+            stopVideoRecording()
             await requestRecovery(failure: .unknown)
         }
     }
@@ -497,6 +655,8 @@ final class CameraViewModel {
 enum CameraAlert: Equatable, Identifiable {
     case videoPermissionRequired(VideoPermission)
     case captureFailed
+    case videoRecordingFailed
+    case videoSaveFailed
     case photoSaveFailed
     case photoLibraryUnauthorized
     case pendingPhotoStorageFailed

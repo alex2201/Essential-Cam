@@ -10,22 +10,26 @@ import SwiftUI
 
 struct CameraPreview: UIViewRepresentable {
     let session: AVCaptureSession
+    var isVideoMode = false
 
     func makeUIView(context: Context) -> PreviewView {
         let previewView = PreviewView()
         previewView.previewLayer.session = session
+        previewView.isVideoMode = isVideoMode
         previewView.previewLayer.videoGravity = .resizeAspectFill
         return previewView
     }
 
     func updateUIView(_ previewView: PreviewView, context: Context) {
-        // No-op.
+        previewView.isVideoMode = isVideoMode
+        previewView.setNeedsLayout()
     }
 }
 
 extension CameraPreview {
     final class PreviewView: UIView {
         private let contentView = PreviewContentView()
+        var isVideoMode = false
 
         init() {
             super.init(frame: .zero)
@@ -73,6 +77,16 @@ extension CameraPreview {
 
         override func layoutSubviews() {
             super.layoutSubviews()
+            if isVideoMode, let orientation = window?.windowScene?.interfaceOrientation,
+               let connection = previewLayer.connection {
+                let angle: CGFloat = switch orientation {
+                case .landscapeLeft: 180
+                case .landscapeRight: 0
+                case .portraitUpsideDown: 270
+                default: 90
+                }
+                if connection.isVideoRotationAngleSupported(angle) { connection.videoRotationAngle = angle }
+            }
 #if targetEnvironment(simulator)
             simulatorGradientLayer?.frame = contentView.bounds
 #endif

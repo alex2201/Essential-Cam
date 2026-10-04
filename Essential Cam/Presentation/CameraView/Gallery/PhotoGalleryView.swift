@@ -5,6 +5,7 @@
 //  Created by Codex on 27/09/26.
 //
 
+import AVKit
 import SwiftUI
 @preconcurrency import Photos
 
@@ -23,7 +24,7 @@ struct PhotoGalleryView: View {
                     ProgressView()
                 } else if viewModel.assetCount == 0 {
                     ContentUnavailableView(
-                        "No Photos",
+                        "No Photos or Videos",
                         systemImage: "photo.on.rectangle.angled",
                         description: Text(viewModel.emptyStateDescription)
                     )
@@ -32,6 +33,7 @@ struct PhotoGalleryView: View {
                         LazyVGrid(columns: columns, spacing: 2) {
                             ForEach(0..<viewModel.assetCount, id: \.self) { index in
                                 PhotoGalleryCell(viewModel: viewModel, index: index)
+                                    .id(viewModel.assetIdentifier(at: index))
                             }
                         }
                         .padding(2)
@@ -40,7 +42,7 @@ struct PhotoGalleryView: View {
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .background(Color.black)
-            .navigationTitle("Photos")
+            .navigationTitle("Gallery")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
@@ -60,6 +62,10 @@ private struct PhotoGalleryCell: View {
 
     @State private var image: UIImage?
     @State private var requestID: PHImageRequestID?
+    @State private var videoRequestID: PHImageRequestID?
+    @State private var playback: GalleryVideoPlayback?
+    @State private var isLoadingVideo = false
+    @State private var playbackFailed = false
 
     var body: some View {
         ZStack {
@@ -73,6 +79,42 @@ private struct PhotoGalleryCell: View {
         }
         .aspectRatio(1, contentMode: .fit)
         .clipped()
+        .overlay {
+            if viewModel.isVideo(at: index) {
+                Button {
+                    isLoadingVideo = true
+                    videoRequestID = viewModel.requestVideo(at: index) { result in
+                        isLoadingVideo = false
+                        videoRequestID = nil
+                        playback = result
+                        playbackFailed = result == nil
+                    }
+                } label: {
+                    if isLoadingVideo {
+                        ProgressView().tint(.white)
+                            .frame(width: 44, height: 44)
+                    } else {
+                        Image(systemName: "play.circle.fill")
+                            .font(.system(size: 36))
+                            .symbolRenderingMode(.palette)
+                            .foregroundStyle(.white, .black.opacity(0.6))
+                            .frame(minWidth: 44, minHeight: 44)
+                    }
+                }
+                .buttonStyle(.plain)
+                .disabled(isLoadingVideo)
+                .accessibilityLabel("Play video")
+                .accessibilityHint("Opens the video player")
+            }
+        }
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel(viewModel.isVideo(at: index) ? "Video thumbnail" : "Photo thumbnail")
+        .sheet(item: $playback) { GalleryVideoPlayerView(playback: $0) }
+        .alert("Video Unavailable", isPresented: $playbackFailed) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text("The video couldn't be loaded. Check your connection and Photos access, then try again.")
+        }
         .onAppear {
             requestID = viewModel.requestThumbnail(
                 at: index,
@@ -85,6 +127,9 @@ private struct PhotoGalleryCell: View {
             if let requestID {
                 viewModel.cancelImageRequest(requestID)
             }
+            if let videoRequestID { viewModel.cancelImageRequest(videoRequestID) }
+            videoRequestID = nil
+            isLoadingVideo = false
             requestID = nil
             image = nil
         }
@@ -112,7 +157,7 @@ final class PhotoGalleryViewModel: NSObject, PHPhotoLibraryChangeObserver {
 
     var emptyStateDescription: String {
         hasPhotoLibraryAccess
-            ? "There are no photos in your library."
+            ? "There are no photos or videos in your library."
             : "Allow photo access in Settings to browse your library."
     }
 
@@ -139,11 +184,36 @@ final class PhotoGalleryViewModel: NSObject, PHPhotoLibraryChangeObserver {
         fetchOptions.sortDescriptors = [
             NSSortDescriptor(key: #keyPath(PHAsset.creationDate), ascending: false)
         ]
-        let fetchedAssets = PHAsset.fetchAssets(with: .image, options: fetchOptions)
+        fetchOptions.predicate = NSPredicate(format: "mediaType == %d OR mediaType == %d", PHAssetMediaType.image.rawValue, PHAssetMediaType.video.rawValue)
+        let fetchedAssets = PHAsset.fetchAssets(with: fetchOptions)
         assets = fetchedAssets
         assetCount = fetchedAssets.count
         hasPhotoLibraryAccess = true
         isLoading = false
+    }
+
+    func assetIdentifier(at index: Int) -> String {
+        guard let assets, index >= 0, index < assets.count else { return "" }
+        return assets.object(at: index).localIdentifier
+    }
+
+    func isVideo(at index: Int) -> Bool {
+        guard let assets, index >= 0, index < assets.count else { return false }
+        return assets.object(at: index).mediaType == .video
+    }
+
+    func requestVideo(at index: Int, completion: @escaping @MainActor (GalleryVideoPlayback?) -> Void) -> PHImageRequestID? {
+        guard let assets, index >= 0, index < assets.count else { return nil }
+        let asset = assets.object(at: index)
+        let identifier = asset.localIdentifier
+        let options = PHVideoRequestOptions()
+        options.isNetworkAccessAllowed = true
+        options.deliveryMode = .automatic
+        return imageManager.requestPlayerItem(forVideo: asset, options: options) { item, _ in
+            Task { @MainActor in
+                completion(item.map { GalleryVideoPlayback(id: identifier, player: AVPlayer(playerItem: $0)) })
+            }
+        }
     }
 
     func requestThumbnail(

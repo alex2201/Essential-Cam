@@ -147,6 +147,19 @@ struct CameraView: View {
                 primaryButton: .default(Text("Open Settings"), action: openSettings),
                 secondaryButton: .cancel()
             )
+        case .videoRecordingFailed:
+            Alert(
+                title: Text("Video Not Recorded"),
+                message: Text("The camera couldn't complete the recording. Please try again."),
+                dismissButton: .default(Text("OK"))
+            )
+        case .videoSaveFailed:
+            Alert(
+                title: Text("Video Not Saved"),
+                message: Text("Your recording is retained on this device. Check Photos access and available storage, then retry. An interrupted file may need to be discarded."),
+                primaryButton: .default(Text("Retry"), action: viewModel.retryPendingVideoSave),
+                secondaryButton: .destructive(Text("Discard"), action: viewModel.discardPendingVideo)
+            )
         case .captureFailed:
             Alert(
                 title: Text("Photo Not Captured"),

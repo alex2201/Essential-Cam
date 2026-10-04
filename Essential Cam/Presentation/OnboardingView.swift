@@ -1,3 +1,10 @@
+//
+//  OnboardingView.swift
+//  Essential Cam
+//
+//  Created by Codex on 04/10/26.
+//
+
 import SwiftUI
 import UIKit
 
@@ -118,7 +125,7 @@ struct OnboardingView: View {
         switch viewModel.permission {
         case .camera: "Allow camera access to compose and capture your photos."
         case .photoLibrary: "Save your captures and browse your gallery. You can allow all photos or select the photos you want to share."
-        case .microphone: "Microphone access is used by Video mode for audio. Photos do not need it. Video recording is coming soon."
+        case .microphone: "Microphone access is used by Video mode for audio. Photos do not need it."
         case nil: "A simple camera. More creative control. Let's set up your permissions before your first capture."
         }
     }

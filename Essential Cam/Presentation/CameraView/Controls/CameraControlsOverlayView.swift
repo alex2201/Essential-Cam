@@ -100,11 +100,12 @@ struct CameraControlsOverlayView: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .trailing)
         .animation(.easeInOut(duration: 0.25), value: presentedControl)
+        .onChange(of: viewModel.selectedCaptureMode) { _, _ in dismissPresentedControl() }
     }
 
     private var defaultControls: some View {
         VStack(spacing: 24) {
-            if !quickSettingsStore.included.isEmpty {
+            if viewModel.selectedCaptureMode == .photo, !quickSettingsStore.included.isEmpty {
                 QuickAccessControlsView(
                     controls: viewModel.controls,
                     showAspectRatioSelector: { present(.aspectRatio) },

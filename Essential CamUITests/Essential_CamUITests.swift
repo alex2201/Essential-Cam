@@ -183,6 +183,118 @@ final class Essential_CamUITests: XCTestCase {
     }
 
     @MainActor
+    func testBasicVideoRecordsSavesAndPlaysOnDevice() throws {
+#if targetEnvironment(simulator)
+        throw XCTSkip("Video capture requires camera and microphone hardware.")
+#else
+        let app = XCUIApplication()
+        app.launchArguments = ["-hasCompletedOnboarding", "YES", "-UIPreferredContentSizeCategoryName", "UICTContentSizeCategoryAccessibilityXXXL"]
+        app.launch()
+        defer { XCUIDevice.shared.orientation = .portrait }
+        let mode = app.buttons["Switch capture mode"]
+        XCTAssertTrue(mode.waitForExistence(timeout: 20))
+
+        // Request read access so the saved clip can be verified in the gallery.
+        app.buttons["Open Photo Library"].tap()
+        allowCapturePermissionAlerts()
+        XCTAssertTrue(app.navigationBars["Gallery"].waitForExistence(timeout: 10))
+        app.buttons["Done"].tap()
+        mode.tap()
+        allowCapturePermissionAlerts()
+        let record = app.buttons["Record Video"]
+        XCTAssertTrue(record.waitForExistence(timeout: 10))
+        let enabled = NSPredicate(format: "enabled == true")
+        expectation(for: enabled, evaluatedWith: record)
+        waitForExpectations(timeout: 15)
+
+        for orientation in [UIDeviceOrientation.portrait, .landscapeLeft, .landscapeRight] {
+            XCUIDevice.shared.orientation = orientation
+            Thread.sleep(forTimeInterval: 1)
+            record.tap()
+            let stop = app.buttons["Stop Recording"]
+            XCTAssertTrue(stop.waitForExistence(timeout: 10), "Recording must actually start")
+            XCTAssertTrue(stop.isEnabled, "Stop must remain usable while other controls are locked")
+            XCTAssertFalse(mode.isEnabled)
+            XCTAssertFalse(app.buttons["Open Photo Library"].isEnabled)
+            Thread.sleep(forTimeInterval: 3)
+            let attachment = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+            attachment.name = "Video recording \(orientation.rawValue)"
+            attachment.lifetime = .keepAlways
+            add(attachment)
+            stop.tap()
+            XCTAssertTrue(record.waitForExistence(timeout: 10))
+            expectation(for: enabled, evaluatedWith: record)
+            waitForExpectations(timeout: 20)
+            XCTAssertFalse(app.alerts.firstMatch.exists, "Recording and save must complete without an error")
+            XCTAssertEqual(app.buttons["Open Photo Library"].value as? String, "Latest capture: Video")
+            XCTAssertTrue(mode.isEnabled)
+        }
+
+        // Also check front-camera recording and finalization when backgrounded.
+        XCUIDevice.shared.orientation = .portrait
+        let switchCamera = app.buttons["Switch between front and back camera"]
+        if switchCamera.exists && switchCamera.isEnabled {
+            switchCamera.tap()
+            expectation(for: enabled, evaluatedWith: record)
+            waitForExpectations(timeout: 15)
+            record.tap()
+            XCTAssertTrue(app.buttons["Stop Recording"].waitForExistence(timeout: 10))
+            Thread.sleep(forTimeInterval: 3)
+            XCUIDevice.shared.press(.home)
+            Thread.sleep(forTimeInterval: 3)
+            app.activate()
+            XCTAssertTrue(record.waitForExistence(timeout: 20))
+            expectation(for: enabled, evaluatedWith: record)
+            waitForExpectations(timeout: 20)
+            XCTAssertFalse(app.alerts.firstMatch.exists)
+            XCTAssertEqual(app.buttons["Open Photo Library"].value as? String, "Latest capture: Video")
+            switchCamera.tap()
+            expectation(for: enabled, evaluatedWith: record)
+            waitForExpectations(timeout: 15)
+        }
+
+        app.buttons["Open Photo Library"].tap()
+        XCTAssertTrue(app.navigationBars["Gallery"].waitForExistence(timeout: 10))
+        let play = app.buttons["Play video"].firstMatch
+        XCTAssertTrue(play.waitForExistence(timeout: 10), "A video thumbnail must expose the play action")
+        play.tap()
+        XCTAssertTrue(app.navigationBars["Video"].waitForExistence(timeout: 15))
+        Thread.sleep(forTimeInterval: 2)
+        let playbackAttachment = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+        playbackAttachment.name = "Recorded video playback"
+        playbackAttachment.lifetime = .keepAlways
+        add(playbackAttachment)
+        app.buttons["Done"].firstMatch.tap()
+        XCTAssertTrue(app.navigationBars["Gallery"].waitForExistence(timeout: 5))
+        app.buttons["Done"].tap()
+        mode.tap()
+        XCTAssertEqual(mode.value as? String, "Photo")
+        let photo = app.buttons["Take Photo"]
+        XCTAssertTrue(photo.waitForExistence(timeout: 5))
+        expectation(for: enabled, evaluatedWith: photo)
+        waitForExpectations(timeout: 15)
+        photo.tap()
+        let latestPhoto = NSPredicate(format: "value == %@", "Latest capture: Photo")
+        expectation(for: latestPhoto, evaluatedWith: app.buttons["Open Photo Library"])
+        waitForExpectations(timeout: 30)
+        XCTAssertFalse(app.alerts.firstMatch.exists, "Photo capture must still save after video")
+#endif
+    }
+
+    @MainActor
+    private func allowCapturePermissionAlerts() {
+        let system = XCUIApplication(bundleIdentifier: "com.apple.springboard")
+        for _ in 0..<4 {
+            let alert = system.alerts.firstMatch
+            guard alert.waitForExistence(timeout: 2) else { return }
+            let labels = ["Allow", "OK", "Allow Photos to Be Added", "Allow Access to All Photos", "Allow Full Access", "Permitir", "Aceptar", "Permitir acceso a todas las fotos", "Permitir acceso completo"]
+            let allow = alert.buttons.matching(NSPredicate(format: "label IN %@", labels)).firstMatch
+            guard allow.exists else { return }
+            allow.tap()
+        }
+    }
+
+    @MainActor
     func testLaunchPerformance() throws {
         // This measures how long it takes to launch your application.
         measure(metrics: [XCTApplicationLaunchMetric()]) {

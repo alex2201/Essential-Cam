@@ -8,6 +8,9 @@ The project focuses on capturing clean, editing-ready photos with Apple's camera
 
 - Live camera preview with orientation support
 - Photo capture and automatic saving to the Photo Library
+- Basic 1080p/30 fps SDR video recording with microphone audio
+- Video thumbnails with a play overlay and in-app playback
+- Retry or discard recordings when saving to Photos fails
 - Quick preview after each capture
 - Physical and virtual lens selection
 - Automatic exposure with exposure compensation
@@ -51,7 +54,17 @@ Switching to Video checks camera, microphone, and permission to add media to the
 Photo Library, requesting undecided permissions in that order. If access is
 denied, open Settings from the alert or return to Photo mode. Permissions are
 checked again when the app becomes active in Video mode. Microphone access is
-not required for photos. Video recording itself is not implemented yet.
+not required for photos.
+
+Video mode records H.264 QuickTime clips at 1080p/30 fps with automatic exposure,
+focus, and white balance. Choose a camera and zoom before recording; camera,
+mode, and settings changes are blocked until the clip finishes saving. The red
+button starts recording and becomes a stop button with an elapsed-time display.
+Leaving the app or a camera interruption ends the recording. A failed save keeps
+the file on this device for retry or discard, including after relaunch. An
+unfinished file from a terminated process may need to be discarded. The gallery
+shows photos and videos, and the play overlay opens a video player. Resolution,
+frame rate, and manual video settings are reserved for a later release.
 
 > The iOS Simulator does not provide the same camera hardware or capabilities as a physical iPhone. Use a real device when testing capture, flash, focus, exposure, white balance, and lens selection.
 

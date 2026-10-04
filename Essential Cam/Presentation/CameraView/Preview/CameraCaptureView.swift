@@ -26,14 +26,16 @@ struct CameraCaptureView: View {
                 geometry.size.width * 16 / 9,
                 geometry.size.height
             )
-            let previewWidthToHeight = viewModel.controls.settings.aspectRatio.previewWidthToHeight
+            let previewWidthToHeight = viewModel.selectedCaptureMode == .video
+                ? (geometry.size.width > geometry.size.height ? 16.0 / 9 : 9.0 / 16)
+                : viewModel.controls.settings.aspectRatio.previewWidthToHeight
             let recentPhotoThumbnails = viewModel.recentPhotoThumbnails
             ZStack {
                 VStack(spacing: .zero) {
                     ZStack {
                         Color.clear
 
-                        CameraPreview(session: viewModel.captureSession)
+                        CameraPreview(session: viewModel.captureSession, isVideoMode: viewModel.selectedCaptureMode == .video)
                             .aspectRatio(previewWidthToHeight, contentMode: .fit)
                             .clipped()
                             .frame(
@@ -43,6 +45,8 @@ struct CameraCaptureView: View {
                             )
                             .contentShape(Rectangle())
                             .gesture(zoomGesture)
+                            .allowsHitTesting(!viewModel.isCameraInteractionDisabled)
+
                     }
                     .frame(width: geometry.size.width, height: previewContainerHeight)
                 }
@@ -51,14 +55,38 @@ struct CameraCaptureView: View {
             .frame(width: geometry.size.width, height: geometry.size.height)
             .overlay(alignment: .trailing) {
                 CameraControlsOverlayView(viewModel: viewModel)
+                    .allowsHitTesting(!viewModel.isCameraInteractionDisabled)
             }
             .overlay(alignment: .topTrailing) {
-                CameraFlashButton(controls: viewModel.controls)
-                    .padding(8)
+                if viewModel.selectedCaptureMode == .photo {
+                    CameraFlashButton(controls: viewModel.controls)
+                        .padding(8)
+                        .disabled(viewModel.isCameraInteractionDisabled)
+                }
             }
             .overlay(alignment: .topLeading) {
-                CameraSettingsButton(action: showSettings)
-                    .padding(8)
+                if viewModel.selectedCaptureMode == .photo {
+                    CameraSettingsButton(action: showSettings)
+                        .disabled(viewModel.isCameraInteractionDisabled)
+                        .padding(8)
+                }
+            }
+            .overlay(alignment: .top) {
+                if let startedAt = viewModel.recordingStartedAt {
+                    TimelineView(.periodic(from: startedAt, by: 1)) { context in
+                        let seconds = max(0, Int(context.date.timeIntervalSince(startedAt)))
+                        Label(String(format: "%02d:%02d", seconds / 60, seconds % 60), systemImage: "record.circle.fill")
+                            .font(.body.monospacedDigit().weight(.semibold))
+                            .foregroundStyle(.white)
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 8)
+                            .background(.red.opacity(0.85), in: .capsule)
+                            .accessibilityLabel("Recording duration")
+                            .accessibilityValue("\(seconds) seconds")
+                    }
+                    .padding(.top, 8)
+                    .allowsHitTesting(false)
+                }
             }
             .overlay(alignment: .top) {
                 CameraPresetCarouselView(
@@ -66,6 +94,10 @@ struct CameraCaptureView: View {
                     controls: viewModel.controls
                 )
                 .padding(.top, 8)
+                .disabled(viewModel.isCameraInteractionDisabled)
+                .allowsHitTesting(viewModel.selectedCaptureMode == .photo && !viewModel.isCameraInteractionDisabled)
+                .opacity(viewModel.selectedCaptureMode == .video ? 0 : 1)
+                .accessibilityHidden(viewModel.selectedCaptureMode == .video)
             }
             .overlay(alignment: .bottom) {
                 Group {
@@ -73,15 +105,17 @@ struct CameraCaptureView: View {
                     case .photo:
                         CaptureControlsView(
                             captureAction: viewModel.captureAction,
-                            isCaptureDisabled: viewModel.isPerformingCaptureOperation,
+                            isCaptureDisabled: viewModel.isCameraInteractionDisabled,
                             indicatorScale: captureIndicatorScale
                         )
                     case .video:
                         VideoCaptureControlsView(
-                            recordAction: {},
+                            recordAction: viewModel.recordVideoAction,
+                            isRecording: viewModel.isRecordingVideo,
+                            isBusy: viewModel.isVideoCaptureInProgress && !viewModel.isRecordingVideo,
                             indicatorScale: captureIndicatorScale
                         )
-                        .disabled(!viewModel.videoPermissionsGranted || viewModel.isCheckingVideoPermissions)
+                        .disabled(viewModel.isVideoRecordDisabled)
                     }
                 }
                 .padding(.bottom, 42)
@@ -94,17 +128,19 @@ struct CameraCaptureView: View {
                     GalleryThumbnailStack(thumbnails: recentPhotoThumbnails)
                 }
                 .buttonStyle(.plain)
+                .disabled(viewModel.isCameraInteractionDisabled)
                 .padding(.leading, 16)
                 .padding(.bottom, 16)
                 .accessibilityLabel("Open Photo Library")
-                .accessibilityHint("Shows your photos in a grid")
+                .accessibilityValue(recentPhotoThumbnails.first?.isVideo == true ? "Latest capture: Video" : "Latest capture: Photo")
+                .accessibilityHint("Shows your photos and videos in a grid")
             }
             .overlay(alignment: .bottomTrailing) {
                 CaptureModeButton(selectedMode: Binding(
                     get: { viewModel.selectedCaptureMode },
                     set: { viewModel.selectCaptureMode($0) }
                 ))
-                    .disabled(viewModel.isCheckingVideoPermissions)
+                    .disabled(viewModel.isCheckingVideoPermissions || viewModel.isCameraInteractionDisabled)
                     .padding(.trailing, 16)
                     .padding(.bottom, 16)
             }
@@ -129,7 +165,7 @@ struct CameraCaptureView: View {
                     .allowsHitTesting(false)
                 }
             }
-            .allowsHitTesting(!viewModel.isCameraInteractionDisabled)
+
             .task(id: viewModel.capturedPhotoPreview?.id) {
                 guard let preview = viewModel.capturedPhotoPreview else { return }
 
@@ -331,6 +367,15 @@ private struct GalleryThumbnailCard: View {
             .overlay {
                 RoundedRectangle(cornerRadius: 5)
                     .stroke(.white.opacity(0.9), lineWidth: 1)
+            }
+            .overlay {
+                if thumbnail.isVideo {
+                    Image(systemName: "play.circle.fill")
+                        .font(.system(size: 18))
+                        .symbolRenderingMode(.palette)
+                        .foregroundStyle(.white, .black.opacity(0.6))
+                        .accessibilityHidden(true)
+                }
             }
             .shadow(color: .black.opacity(0.45), radius: 2, y: 1)
     }

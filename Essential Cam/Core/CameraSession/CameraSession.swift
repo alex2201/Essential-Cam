@@ -50,6 +50,11 @@ actor CameraSession {
     private var activeVideoInput: AVCaptureDeviceInput?
     private var isSetUp = false
     private var isCapturingPhoto = false
+    private var isRecordingVideo = false
+    private var isStoppingVideo = false
+    private var recordingID: UUID?
+    private var activeAudioInput: AVCaptureDeviceInput?
+    private var rotationCoordinator: AVCaptureDevice.RotationCoordinator?
     private var selectedCameraPosition = Camera.Position.back
 
     nonisolated var unownedExecutor: UnownedSerialExecutor {
@@ -81,7 +86,7 @@ actor CameraSession {
     }
 
     func stop() {
-        guard captureSession.isRunning else { return }
+        guard captureSession.isRunning, !isRecordingVideo else { return }
         captureSession.stopRunning()
     }
 
@@ -188,7 +193,7 @@ actor CameraSession {
     }
 
     func apply(_ settings: CameraSettings) throws(CameraSessionError) {
-        guard !isCapturingPhoto else { throw .operationInProgress }
+        guard !isCapturingPhoto, !isRecordingVideo else { throw .operationInProgress }
         guard isSetUp, let device = activeVideoInput?.device else {
             throw .setupFailed
         }
@@ -209,7 +214,7 @@ actor CameraSession {
     }
 
     func applyZoom(_ settings: CameraSettings) throws(CameraSessionError) {
-        guard !isCapturingPhoto else { throw .operationInProgress }
+        guard !isCapturingPhoto, !isRecordingVideo else { throw .operationInProgress }
         guard isSetUp, let device = activeVideoInput?.device else {
             throw .setupFailed
         }
@@ -247,7 +252,7 @@ actor CameraSession {
     func applyAfterCameraSwitch(
         _ settings: CameraSettings
     ) throws(CameraSessionError) {
-        guard !isCapturingPhoto else { throw .operationInProgress }
+        guard !isCapturingPhoto, !isRecordingVideo else { throw .operationInProgress }
         guard isSetUp, let device = activeVideoInput?.device else {
             throw .setupFailed
         }
@@ -268,7 +273,7 @@ actor CameraSession {
     }
 
     func selectCamera(id: Camera.ID) throws(CameraSessionError) {
-        guard !isCapturingPhoto else { throw .operationInProgress }
+        guard !isCapturingPhoto, !isRecordingVideo else { throw .operationInProgress }
         guard isSetUp else {
             throw .setupFailed
         }
@@ -282,7 +287,7 @@ actor CameraSession {
     }
 
     func toggleCameraPosition() throws(CameraSessionError) {
-        guard !isCapturingPhoto else { throw .operationInProgress }
+        guard !isCapturingPhoto, !isRecordingVideo else { throw .operationInProgress }
         guard isSetUp else {
             throw .setupFailed
         }
@@ -320,6 +325,7 @@ actor CameraSession {
         }
 
         activeVideoInput = try addInput(for: defaultCamera)
+        rotationCoordinator = AVCaptureDevice.RotationCoordinator(device: defaultCamera, previewLayer: nil)
         captureSession.sessionPreset = .photo
 
         for capture in captureComponents {
@@ -369,6 +375,7 @@ actor CameraSession {
 
         captureSession.addInput(newInput)
         activeVideoInput = newInput
+        rotationCoordinator = AVCaptureDevice.RotationCoordinator(device: device, previewLayer: nil)
 
         for capture in captureComponents {
             capture.updateConfiguration(for: device)
@@ -394,7 +401,7 @@ actor CameraSession {
     }
 
     private var captureComponents: [any CameraCaptureComponent] {
-        [photoCaptureService, videoCaptureService]
+        [photoCaptureService]
     }
 
     private func apply(
@@ -608,7 +615,7 @@ extension CameraSession: PhotoCapturing {
         contentAwareCorrection: ContentAwareCorrection,
         previewHandler: @escaping @Sendable (CGImage) -> Void
     ) async throws -> Photo {
-        guard !isCapturingPhoto else {
+        guard !isCapturingPhoto, !isRecordingVideo else {
             throw CameraSessionError.operationInProgress
         }
         isCapturingPhoto = true
@@ -630,5 +637,101 @@ extension CameraSession: PhotoCapturing {
             contentAwareCorrection: contentAwareCorrection,
             previewHandler: previewHandler
         )
+    }
+}
+
+
+extension CameraSession: VideoRecording {
+    func recordVideo(to url: URL, didStart: @escaping @Sendable () -> Void) async throws {
+        try Task.checkCancellation()
+        guard !isCapturingPhoto, !isRecordingVideo else { throw VideoCaptureError.operationInProgress }
+        guard isSetUp, captureSession.isRunning,
+              AVCaptureDevice.authorizationStatus(for: .audio) == .authorized,
+              let device = activeVideoInput?.device else {
+            throw VideoCaptureError.recordingFailed
+        }
+        isRecordingVideo = true
+        isStoppingVideo = false
+        let id = UUID()
+        recordingID = id
+        defer {
+            restorePhotoConfiguration()
+            isRecordingVideo = false
+            recordingID = nil
+            isStoppingVideo = false
+        }
+        try configureVideo(device: device)
+        if let connection = videoCaptureService.output.connection(with: .video) {
+            let angle = rotationCoordinator?.videoRotationAngleForHorizonLevelCapture ?? 90
+            if connection.isVideoRotationAngleSupported(angle) {
+                connection.videoRotationAngle = angle
+            }
+            if connection.isVideoMirroringSupported {
+                connection.automaticallyAdjustsVideoMirroring = false
+                connection.isVideoMirrored = false
+            }
+        }
+        try await videoCaptureService.record(to: url) { [weak self] in
+            Task { await self?.videoRecordingDidStart(id: id, didStart: didStart) }
+        }
+    }
+
+    func stopVideoRecording() {
+        guard isRecordingVideo else { return }
+        isStoppingVideo = true
+        videoCaptureService.stopRecording()
+    }
+
+    private func videoRecordingDidStart(id: UUID, didStart: @Sendable () -> Void) {
+        guard recordingID == id else { return }
+        didStart()
+        // A stop can arrive before AVFoundation reports that recording started.
+        if isStoppingVideo { videoCaptureService.stopRecording() }
+    }
+
+    private func configureVideo(device: AVCaptureDevice) throws {
+        guard let microphone = AVCaptureDevice.default(for: .audio) else {
+            throw VideoCaptureError.recordingFailed
+        }
+        captureSession.beginConfiguration()
+        defer { captureSession.commitConfiguration() }
+        guard captureSession.canSetSessionPreset(.hd1920x1080) else {
+            throw VideoCaptureError.unsupportedConfiguration
+        }
+        captureSession.sessionPreset = .hd1920x1080
+        activeAudioInput = try addInput(for: microphone)
+        try addOutput(videoCaptureService.output)
+        try device.lockForConfiguration()
+        defer { device.unlockForConfiguration() }
+        guard device.activeFormat.videoSupportedFrameRateRanges.contains(where: {
+            $0.minFrameRate <= 30 && $0.maxFrameRate >= 30
+        }) else { throw VideoCaptureError.unsupportedConfiguration }
+        let frameDuration = CMTime(value: 1, timescale: 30)
+        device.activeVideoMinFrameDuration = frameDuration
+        device.activeVideoMaxFrameDuration = frameDuration
+        device.automaticallyAdjustsVideoHDREnabled = false
+        if device.activeFormat.isVideoHDRSupported { device.isVideoHDREnabled = false }
+        if device.activeFormat.supportedColorSpaces.contains(.sRGB) { device.activeColorSpace = .sRGB }
+        // Fixed automatic settings for the basic video release. Photo settings
+        // are reapplied by the controller once this recording has finished.
+        if device.isExposureModeSupported(.continuousAutoExposure) { device.exposureMode = .continuousAutoExposure }
+        if device.isFocusModeSupported(.continuousAutoFocus) { device.focusMode = .continuousAutoFocus }
+        if device.isWhiteBalanceModeSupported(.continuousAutoWhiteBalance) { device.whiteBalanceMode = .continuousAutoWhiteBalance }
+    }
+
+    private func restorePhotoConfiguration() {
+        captureSession.beginConfiguration()
+        defer { captureSession.commitConfiguration() }
+        if captureSession.outputs.contains(videoCaptureService.output) {
+            captureSession.removeOutput(videoCaptureService.output)
+        }
+        if let activeAudioInput {
+            captureSession.removeInput(activeAudioInput)
+            self.activeAudioInput = nil
+        }
+        if captureSession.canSetSessionPreset(.photo) { captureSession.sessionPreset = .photo }
+        if let device = activeVideoInput?.device {
+            photoCaptureService.updateConfiguration(for: device)
+        }
     }
 }

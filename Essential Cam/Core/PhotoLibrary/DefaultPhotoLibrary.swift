@@ -12,9 +12,10 @@ struct PhotoLibraryThumbnail: Identifiable, @unchecked Sendable {
     let id: String
     let image: UIImage
     let aspectRatio: CGFloat
+    var isVideo = false
 }
 
-struct DefaultPhotoLibrary: PhotoSaving, PhotoLibraryReading, PhotoLibraryAuthorizationProviding {
+struct DefaultPhotoLibrary: PhotoSaving, VideoSaving, PhotoLibraryReading, PhotoLibraryAuthorizationProviding {
     func save(_ photo: Photo) async throws {
         let status = await PHPhotoLibrary.requestAuthorization(for: .addOnly)
         guard status == .authorized || status == .limited else {
@@ -36,6 +37,16 @@ struct DefaultPhotoLibrary: PhotoSaving, PhotoLibraryReading, PhotoLibraryAuthor
         } catch {
             // TODO: Track this error with the integrated logging service.
             throw PhotoCaptureError.photoLibrarySaveFailed
+        }
+    }
+
+    func saveVideo(at url: URL) async throws {
+        let status = await PHPhotoLibrary.requestAuthorization(for: .addOnly)
+        guard status == .authorized || status == .limited else {
+            throw VideoCaptureError.saveFailed
+        }
+        try await PHPhotoLibrary.shared().performChanges {
+            PHAssetCreationRequest.forAsset().addResource(with: .video, fileURL: url, options: nil)
         }
     }
 
@@ -64,10 +75,8 @@ struct DefaultPhotoLibrary: PhotoSaving, PhotoLibraryReading, PhotoLibraryAuthor
             NSSortDescriptor(key: #keyPath(PHAsset.creationDate), ascending: false)
         ]
 
-        let assets = PHAsset.fetchAssets(
-            with: .image,
-            options: fetchOptions
-        )
+        fetchOptions.predicate = NSPredicate(format: "mediaType == %d OR mediaType == %d", PHAssetMediaType.image.rawValue, PHAssetMediaType.video.rawValue)
+        let assets = PHAsset.fetchAssets(with: fetchOptions)
         var thumbnails: [PhotoLibraryThumbnail] = []
 
         for index in 0..<assets.count {
@@ -105,7 +114,8 @@ struct DefaultPhotoLibrary: PhotoSaving, PhotoLibraryReading, PhotoLibraryAuthor
                     returning: PhotoLibraryThumbnail(
                         id: asset.localIdentifier,
                         image: image,
-                        aspectRatio: aspectRatio
+                        aspectRatio: aspectRatio,
+                        isVideo: asset.mediaType == .video
                     )
                 )
             }

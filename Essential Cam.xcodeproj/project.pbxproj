@@ -495,7 +495,7 @@
 				INFOPLIST_KEY_NSCameraUsageDescription = "Essential Cam needs camera access to take photos and record videos";
 				INFOPLIST_KEY_NSMicrophoneUsageDescription = "Essential Cam needs microphone access to record audio with your videos";
 				INFOPLIST_KEY_NSPhotoLibraryAddUsageDescription = "Essential Cam needs access to save your photos and videos in the Photo Library";
-				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "Essential Cam needs access to show your latest photo";
+				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "Essential Cam needs access to show your photos and videos";
 				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphoneos*]" = YES;
 				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphonesimulator*]" = YES;
 				"INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents[sdk=iphoneos*]" = YES;
@@ -560,7 +560,7 @@
 				INFOPLIST_KEY_NSCameraUsageDescription = "Essential Cam needs camera access to take photos and record videos";
 				INFOPLIST_KEY_NSMicrophoneUsageDescription = "Essential Cam needs microphone access to record audio with your videos";
 				INFOPLIST_KEY_NSPhotoLibraryAddUsageDescription = "Essential Cam needs access to save your photos and videos in the Photo Library";
-				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "Essential Cam needs access to show your latest photo";
+				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "Essential Cam needs access to show your photos and videos";
 				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphoneos*]" = YES;
 				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphonesimulator*]" = YES;
 				"INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents[sdk=iphoneos*]" = YES;

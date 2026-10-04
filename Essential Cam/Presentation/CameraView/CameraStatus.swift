@@ -33,6 +33,10 @@ enum CameraOperation: Equatable {
     case none
     case starting
     case capturingPhoto
+    case startingVideo
+    case recordingVideo
+    case finishingVideo
+    case savingVideo
     case switchingCamera
     case recovering
 }
