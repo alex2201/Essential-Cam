@@ -160,13 +160,15 @@ rotate in place and close after selection or a tap outside. Camera choice panels
 reserve their row dimensions before rotating text, including lens, aspect-ratio,
 timer, resolution, and video selectors. System alerts retain their standard presentation.
 
-The committed next stage will orient captured media while preserving preview
-geometry and the fixed interface layout.
-Photos will use the orientation at the actual shutter boundary, after any timer.
-Videos will reserve their orientation before asynchronous recording preparation
-and keep it fixed through finalization, even if the phone moves. Control labels
-continue to follow the device independently. Capture orientation is not yet
-implemented; control rotation does not change capture or preview behavior.
+Photos use the detected physical orientation at the shutter boundary, after any
+photo timer. The capture connection receives that orientation independently of
+the portrait preview. Pending-photo save retries preserve the captured data.
+If there has not been a valid reading, capture defaults to portrait.
+
+Video orientation is still handled by its existing AVFoundation rotation coordinator.
+The next stage will reserve the detected orientation before asynchronous recording
+preparation and keep it fixed through finalization, even if the phone moves.
+Control labels continue to follow the device independently.
 
 ## Architecture
 

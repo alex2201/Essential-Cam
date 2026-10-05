@@ -9,6 +9,7 @@ import CoreGraphics
 
 protocol PhotoCapturing: Sendable {
     func capturePhoto(
+        orientation: CaptureOrientation,
         flashMode: CameraFlashMode,
         aspectRatio: CameraAspectRatio,
         outputFormat: PhotoOutputFormat,
@@ -28,6 +29,7 @@ struct PhotoCaptureUseCase {
 
     // Returns proxy photo to show quick preview to the user
     func execute(
+        orientation: CaptureOrientation = .portrait,
         flashMode: CameraFlashMode,
         aspectRatio: CameraAspectRatio,
         outputFormat: PhotoOutputFormat,
@@ -36,6 +38,7 @@ struct PhotoCaptureUseCase {
         previewHandler: @escaping @Sendable (CGImage) -> Void = { _ in }
     ) async throws -> Photo {
         let photo = try await photoCapture.capturePhoto(
+            orientation: orientation,
             flashMode: flashMode,
             aspectRatio: aspectRatio,
             outputFormat: outputFormat,

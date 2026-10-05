@@ -786,6 +786,7 @@ actor CameraSession {
 
 extension CameraSession: PhotoCapturing {
     func capturePhoto(
+        orientation: CaptureOrientation,
         flashMode: CameraFlashMode,
         aspectRatio: CameraAspectRatio,
         outputFormat: PhotoOutputFormat,
@@ -806,6 +807,13 @@ extension CameraSession: PhotoCapturing {
         } else {
             supportedFlashMode = .off
         }
+
+        // Set only the photo connection; the portrait preview keeps its geometry.
+        guard let connection = photoCaptureService.output.connection(with: .video),
+              connection.isVideoRotationAngleSupported(orientation.photoRotationAngle) else {
+            throw PhotoCaptureError.photoProcessingFailed
+        }
+        connection.videoRotationAngle = orientation.photoRotationAngle
 
         return try await photoCaptureService.capturePhoto(
             flashMode: supportedFlashMode,

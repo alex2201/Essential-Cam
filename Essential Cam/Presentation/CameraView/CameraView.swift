@@ -125,6 +125,9 @@ struct CameraView: View {
             presetStore.updateUnselectedSettings(settings)
         }
         .alert(item: $viewModel.activeAlert, content: alert(for:))
+        .onChange(of: orientationController.orientation, initial: true) { _, orientation in
+            if let orientation { viewModel.updateCaptureOrientation(orientation) }
+        }
         .task(id: scenePhase == .active && !isSettingsPresented && !isGalleryPresented) {
             guard scenePhase == .active, !isSettingsPresented, !isGalleryPresented else { return }
             await orientationController.observe()

@@ -1,3 +1,10 @@
+//
+//  PhotoCaptureCoordinator.swift
+//  Essential Cam
+//
+//  Created by Alexander López.
+//
+
 import Foundation
 
 enum PhotoCaptureWorkflowError: Error, Equatable {
@@ -9,7 +16,7 @@ enum PhotoCaptureWorkflowError: Error, Equatable {
 }
 
 protocol PhotoCaptureCoordinating: Sendable {
-    func capture(settings: CameraSettings) async throws -> Photo
+    func capture(settings: CameraSettings, orientation: CaptureOrientation) async throws -> Photo
     func restorePendingPhoto() async throws -> Photo?
     func retryPendingSave() async throws -> Photo
     func discardPendingPhoto() async throws
@@ -32,7 +39,7 @@ actor PhotoCaptureCoordinator: PhotoCaptureCoordinating {
         self.pendingStore = pendingStore
     }
 
-    func capture(settings: CameraSettings) async throws -> Photo {
+    func capture(settings: CameraSettings, orientation: CaptureOrientation = .portrait) async throws -> Photo {
         guard pendingPhoto == nil else {
             throw PhotoCaptureWorkflowError.pendingPhotoAlreadyExists
         }
@@ -40,6 +47,7 @@ actor PhotoCaptureCoordinator: PhotoCaptureCoordinating {
         let photo: Photo
         do {
             photo = try await photoCapture.capturePhoto(
+                orientation: orientation,
                 flashMode: settings.flashMode,
                 aspectRatio: settings.aspectRatio,
                 outputFormat: settings.photoOutputFormat,

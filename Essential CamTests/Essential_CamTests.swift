@@ -255,6 +255,23 @@ struct Essential_CamTests {
         #expect(restored?.uniformTypeIdentifier == photo.uniformTypeIdentifier)
     }
 
+    @Test(arguments: [CaptureOrientation.portrait, .landscapeLeft, .landscapeRight, .portraitUpsideDown])
+    func photoWorkflowForwardsOrientationAndRetainsItOnSaveRetry(orientation: CaptureOrientation) async throws {
+        let photo = makePhoto([0x07])
+        let capture = PhotoCaptureSpy(photo: photo)
+        let library = PhotoSavingSpy(error: PhotoCaptureError.photoLibrarySaveFailed)
+        let coordinator = makeCoordinator(capture: capture, library: library, pendingStore: PendingPhotoStoreSpy())
+        await #expect(throws: PhotoCaptureWorkflowError.photoLibrarySaveFailed) {
+            try await coordinator.capture(settings: .standard, orientation: orientation)
+        }
+        #expect(await capture.capturedOrientation == orientation)
+        await library.setError(nil)
+        let saved = try await coordinator.retryPendingSave()
+        #expect(saved.data == photo.data)
+        #expect(await capture.captureCount == 1)
+        #expect(await capture.capturedOrientation == orientation)
+    }
+
     @Test func pendingPhotoIsNotOverwrittenByAnotherCapture() async throws {
         let photo = makePhoto([0x01])
         let capture = PhotoCaptureSpy(photo: photo)
@@ -497,12 +514,14 @@ private enum TestError: Error {
 private actor PhotoCaptureSpy: PhotoCapturing {
     private let photo: Photo
     private(set) var captureCount = 0
+    private(set) var capturedOrientation: CaptureOrientation?
 
     init(photo: Photo) {
         self.photo = photo
     }
 
     func capturePhoto(
+        orientation: CaptureOrientation,
         flashMode: CameraFlashMode,
         aspectRatio: CameraAspectRatio,
         outputFormat: PhotoOutputFormat,
@@ -511,6 +530,7 @@ private actor PhotoCaptureSpy: PhotoCapturing {
         previewHandler: @escaping @Sendable (CGImage) -> Void
     ) async throws -> Photo {
         captureCount += 1
+        capturedOrientation = orientation
         return photo
     }
 }

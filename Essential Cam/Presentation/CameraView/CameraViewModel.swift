@@ -385,6 +385,10 @@ final class CameraViewModel {
 
     // MARK: - Photo Capture
 
+    func updateCaptureOrientation(_ orientation: CaptureOrientation) {
+        captureOrientation = orientation
+    }
+
     func captureAction() {
 #if targetEnvironment(simulator)
         // Simulator builds are intended for reviewing the camera interface.
@@ -411,7 +415,9 @@ final class CameraViewModel {
                     captureCountdown = nil
                     guard cameraStatus == .running else { return }
                 }
-                let photo = try await photoCoordinator.capture(settings: settings)
+                let photo = try await photoCoordinator.capture(
+                    settings: settings, orientation: captureOrientation
+                )
                 handleSavedPhoto(photo)
             } catch is CancellationError {
                 captureCountdown = nil

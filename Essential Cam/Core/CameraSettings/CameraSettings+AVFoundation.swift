@@ -125,3 +125,16 @@ extension AVCaptureDevice.WhiteBalanceGains {
         )
     }
 }
+
+
+extension CaptureOrientation {
+    /// Capture coordinates differ from the in-place rotation of UI labels.
+    var photoRotationAngle: CGFloat {
+        switch self {
+        case .portrait: 90
+        case .portraitUpsideDown: 270
+        case .landscapeLeft: 0
+        case .landscapeRight: 180
+        }
+    }
+}

@@ -33,6 +33,13 @@ struct CameraOrientationTests {
         Attachment.record(data, named: "Lens focal lengths \(degrees) degrees.png")
     }
 
+    @Test func photoAnglesUseCaptureCoordinates() {
+        #expect(CaptureOrientation.portrait.photoRotationAngle == 90)
+        #expect(CaptureOrientation.landscapeLeft.photoRotationAngle == 0)
+        #expect(CaptureOrientation.landscapeRight.photoRotationAngle == 180)
+        #expect(CaptureOrientation.portraitUpsideDown.photoRotationAngle == 270)
+    }
+
     @Test func controlAnglesCompensateAllDevicePositions() {
         #expect(CaptureOrientation.portrait.controlRotationDegrees == 0)
         #expect(CaptureOrientation.landscapeLeft.controlRotationDegrees == 90)
