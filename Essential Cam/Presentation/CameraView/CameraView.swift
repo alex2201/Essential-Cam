@@ -15,6 +15,7 @@ struct CameraView: View {
     @Environment(CameraPresetStore.self) private var presetStore
     @Environment(QuickSettingsStore.self) private var quickSettingsStore
     @State private var viewModel = CameraViewModel()
+    @State private var orientationController = CameraOrientationController()
     @State private var isSettingsPresented = false
     @State private var isGalleryPresented = false
 
@@ -26,6 +27,7 @@ struct CameraView: View {
 #if targetEnvironment(simulator)
                 CameraCaptureView(
                     viewModel: viewModel,
+                    iconOrientation: orientationController.orientation,
                     showSettings: { isSettingsPresented = true },
                     showGallery: { isGalleryPresented = true }
                 )
@@ -34,6 +36,7 @@ struct CameraView: View {
                 case .running:
                     CameraCaptureView(
                         viewModel: viewModel,
+                        iconOrientation: orientationController.orientation,
                         showSettings: { isSettingsPresented = true },
                         showGallery: { isGalleryPresented = true }
                     )
@@ -122,6 +125,10 @@ struct CameraView: View {
             presetStore.updateUnselectedSettings(settings)
         }
         .alert(item: $viewModel.activeAlert, content: alert(for:))
+        .task(id: scenePhase == .active && !isSettingsPresented && !isGalleryPresented) {
+            guard scenePhase == .active, !isSettingsPresented, !isGalleryPresented else { return }
+            await orientationController.observe()
+        }
     }
 
     @ViewBuilder
@@ -132,6 +139,7 @@ struct CameraView: View {
     ) -> some View {
         CameraCaptureView(
             viewModel: viewModel,
+            iconOrientation: orientationController.orientation,
             showSettings: { isSettingsPresented = true },
             showGallery: { isGalleryPresented = true }
         )

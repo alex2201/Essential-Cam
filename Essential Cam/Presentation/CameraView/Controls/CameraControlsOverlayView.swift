@@ -2,12 +2,13 @@
 //  CameraControlsOverlayView.swift
 //  Essential Cam
 //
-//  Created by Codex on 27/09/26.
+//  Created by Alexander López on 27/09/26.
 //
 
 import SwiftUI
 
 struct CameraControlsOverlayView: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(QuickSettingsStore.self) private var quickSettingsStore
     let viewModel: CameraViewModel
 
@@ -103,7 +104,7 @@ struct CameraControlsOverlayView: View {
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .trailing)
-        .animation(.easeInOut(duration: 0.25), value: presentedControl)
+        .animation(menuAnimation, value: presentedControl)
         .onChange(of: viewModel.selectedCaptureMode) { _, _ in dismissPresentedControl() }
     }
 
@@ -135,8 +136,12 @@ struct CameraControlsOverlayView: View {
         }
     }
 
+    private var menuAnimation: Animation {
+        reduceMotion ? .easeInOut(duration: 0.2) : .smooth(duration: 0.32)
+    }
+
     private var controlTransition: AnyTransition {
-        .move(edge: .trailing).combined(with: .opacity)
+        reduceMotion ? .opacity : .scale(scale: 0.96, anchor: .trailing).combined(with: .opacity)
     }
 
     private var zoomSelectionFactors: [Double] {
@@ -158,7 +163,7 @@ struct CameraControlsOverlayView: View {
     }
 
     private func present(_ control: PresentedCameraControl) {
-        withAnimation(.easeInOut(duration: 0.25)) {
+        withAnimation(menuAnimation) {
             presentedControl = control
         }
     }
@@ -195,7 +200,7 @@ struct CameraControlsOverlayView: View {
 
     private func dismissPresentedControl() {
         guard presentedControl != nil else { return }
-        withAnimation(.easeInOut(duration: 0.25)) {
+        withAnimation(menuAnimation) {
             presentedControl = nil
         }
     }

@@ -2,7 +2,7 @@
 //  VideoMicrophoneRouter.swift
 //  Essential Cam
 //
-//  Created by Codex.
+//  Created by Alexander López.
 //
 
 import AVFoundation

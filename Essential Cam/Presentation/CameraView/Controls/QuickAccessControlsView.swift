@@ -56,6 +56,9 @@ struct QuickAccessControlsView: View {
                         .font(.system(size: 10))
                         .foregroundStyle(.white.opacity(0.78))
                 }
+                .lineLimit(1)
+                .minimumScaleFactor(0.65)
+                .cameraControlContentRotation()
                 .frame(maxWidth: .infinity)
                 .contentShape(Rectangle())
             }
@@ -85,9 +88,13 @@ struct QuickAccessControlsView: View {
                         .font(.system(size: 10))
                         .foregroundStyle(.white.opacity(0.78))
                 }
+                .lineLimit(1)
+                .minimumScaleFactor(0.65)
+                .cameraControlContentRotation()
                 .frame(maxWidth: .infinity)
                 .contentShape(Rectangle())
             }
+            .accessibilityIdentifier("camera.quick.exposure")
         case .focus:
             Button(action: showFocusEditor) {
                 VStack(spacing: 4) {
@@ -97,9 +104,13 @@ struct QuickAccessControlsView: View {
                         .font(.system(size: 10))
                         .foregroundStyle(.white.opacity(0.78))
                 }
+                .lineLimit(1)
+                .minimumScaleFactor(0.65)
+                .cameraControlContentRotation()
                 .frame(maxWidth: .infinity)
                 .contentShape(Rectangle())
             }
+            .accessibilityIdentifier("camera.quick.focus")
         case .whiteBalance:
             Button(action: showWhiteBalanceEditor) {
                 VStack(spacing: 4) {
@@ -109,9 +120,13 @@ struct QuickAccessControlsView: View {
                         .font(.system(size: 10))
                         .foregroundStyle(.white.opacity(0.78))
                 }
+                .lineLimit(1)
+                .minimumScaleFactor(0.65)
+                .cameraControlContentRotation()
                 .frame(maxWidth: .infinity)
                 .contentShape(Rectangle())
             }
+            .accessibilityIdentifier("camera.quick.whiteBalance")
         case .videoResolution:
             quickSettingButton(icon: "video", value: controls.settings.video.resolution.displayName,
                 accessibilityLabel: "Choose video resolution", action: { showVideoSetting(control) })
@@ -155,6 +170,9 @@ struct QuickAccessControlsView: View {
                     .font(.system(size: 10))
                     .foregroundStyle(.white.opacity(0.78))
             }
+            .lineLimit(1)
+            .minimumScaleFactor(0.65)
+            .cameraControlContentRotation()
             .frame(maxWidth: .infinity)
             .contentShape(Rectangle())
         }
@@ -177,6 +195,7 @@ struct QuickSettingSelectionView<Value: Hashable>: View {
         VStack(spacing: 12) {
             VStack(spacing: 0) {
                 Image(systemName: icon)
+                    .cameraIconRotation()
                     .font(.system(size: 16, weight: .semibold))
                     .foregroundStyle(.white)
                     .frame(width: 60, height: 40)
@@ -192,7 +211,10 @@ struct QuickSettingSelectionView<Value: Hashable>: View {
                         Text(label(value))
                             .font(.system(size: 13, weight: .semibold, design: .rounded))
                             .foregroundStyle(value == selectedValue ? Color.yellow : Color.white)
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.65)
                             .frame(width: 60, height: 44)
+                            .cameraControlContentRotation()
                             .contentShape(Rectangle())
                     }
                     .buttonStyle(.plain)
@@ -204,6 +226,7 @@ struct QuickSettingSelectionView<Value: Hashable>: View {
 
             Button(action: dismiss) {
                 Image(systemName: "xmark")
+                    .cameraIconRotation()
                     .font(.system(size: 13, weight: .semibold))
                     .foregroundStyle(.white)
                     .frame(width: 36, height: 36)
@@ -226,6 +249,7 @@ struct AspectRatioSelectionView: View {
         VStack(spacing: 12) {
             VStack(spacing: 0) {
                 Image(systemName: "aspectratio")
+                    .cameraIconRotation()
                     .font(.system(size: 16, weight: .semibold))
                     .foregroundStyle(.white)
                     .frame(width: 45, height: 36)
@@ -247,7 +271,10 @@ struct AspectRatioSelectionView: View {
                             .foregroundStyle(
                                 ratio == selectedAspectRatio ? Color.yellow : Color.white
                             )
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.65)
                             .frame(width: 45, height: 44)
+                            .cameraControlContentRotation()
                             .contentShape(Rectangle())
                     }
                     .buttonStyle(.plain)
@@ -261,6 +288,7 @@ struct AspectRatioSelectionView: View {
 
             Button(action: dismiss) {
                 Image(systemName: "xmark")
+                    .cameraIconRotation()
                     .font(.system(size: 13, weight: .semibold))
                     .foregroundStyle(.white)
                     .frame(width: 36, height: 36)

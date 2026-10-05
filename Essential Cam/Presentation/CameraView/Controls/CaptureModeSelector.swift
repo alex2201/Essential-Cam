@@ -2,7 +2,7 @@
 //  CaptureModeSelector.swift
 //  Essential Cam
 //
-//  Created by Codex on 27/09/26.
+//  Created by Alexander López on 27/09/26.
 //
 
 import SwiftUI
@@ -37,6 +37,7 @@ struct CaptureModeButton: View {
             }
         } label: {
             Image(systemName: selectedMode.iconName)
+                .cameraIconRotation()
                 .font(.system(size: 17, weight: .semibold))
                 .foregroundStyle(.white)
                 .contentTransition(.symbolEffect(.replace))

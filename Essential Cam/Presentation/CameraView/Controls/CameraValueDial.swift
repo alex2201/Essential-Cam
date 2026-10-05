@@ -37,6 +37,9 @@ struct CameraValueDial: View {
     var body: some View {
         VStack(spacing: 12) {
             valueLabel
+                .lineLimit(1)
+                .minimumScaleFactor(0.65)
+                .cameraControlContentRotation()
 
             GeometryReader { _ in
                 Canvas { context, size in

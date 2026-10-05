@@ -21,6 +21,236 @@ final class Essential_CamUITests: XCTestCase {
     }
 
     @MainActor
+    func testCameraControlsStayFixedWhileDeviceRotates() throws {
+#if targetEnvironment(simulator)
+        let app = XCUIApplication()
+        app.launchArguments = ["-hasCompletedOnboarding", "YES"]
+        defer { XCUIDevice.shared.orientation = .portrait }
+        XCUIDevice.shared.orientation = .portrait
+        app.launch()
+        XCTAssertTrue(app.buttons["Take Photo"].waitForExistence(timeout: 10))
+        XCTAssertFalse(app.staticTexts["camera.detectedOrientation"].exists)
+        let fixedButtons = ["Settings", "Flash", "Switch capture mode", "Open Photo Library", "Take Photo", "Choose camera lens", "Choose zoom level", "camera.quick.exposure", "camera.quick.focus", "camera.quick.whiteBalance"]
+        let initialFrames = fixedButtons.map { app.buttons[$0].frame }
+        for (orientation, value) in [
+            (UIDeviceOrientation.portrait, "Vertical"),
+            (.landscapeLeft, "Horizontal · top to left"),
+            (.landscapeRight, "Horizontal · top to right"),
+            (.portraitUpsideDown, "Vertical · upside down"),
+            (.portrait, "Vertical")
+        ] {
+            XCUIDevice.shared.orientation = orientation
+            XCTAssertLessThan(app.frame.width, app.frame.height, "The interface must stay portrait")
+            XCTAssertTrue(app.buttons["Take Photo"].isHittable)
+            for (index, name) in fixedButtons.enumerated() {
+                XCTAssertEqual(app.buttons[name].frame, initialFrames[index], "Rotating labels must not move \(name)")
+            }
+            let attachment = XCTAttachment(screenshot: app.screenshot())
+            attachment.name = "Camera labels · \(value)"
+            attachment.lifetime = .keepAlways
+            add(attachment)
+        }
+        XCUIDevice.shared.orientation = .landscapeLeft
+        app.buttons["Settings"].tap()
+        XCTAssertTrue(app.navigationBars["Settings"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.buttons["Done"].isHittable)
+        let settingsAttachment = XCTAttachment(screenshot: app.screenshot())
+        settingsAttachment.name = "Settings stays portrait with device horizontal"
+        settingsAttachment.lifetime = .keepAlways
+        add(settingsAttachment)
+        app.buttons["Done"].tap()
+        XCTAssertTrue(app.buttons["Take Photo"].waitForExistence(timeout: 5))
+#else
+        throw XCTSkip("Simulated orientation changes run in the simulator; verify physical readings on iPhone.")
+#endif
+    }
+
+    @MainActor
+    func testCameraControlsSupportLargeTextInPortrait() throws {
+#if targetEnvironment(simulator)
+        let app = XCUIApplication()
+        app.launchArguments = [
+            "-hasCompletedOnboarding", "YES",
+            "-UIPreferredContentSizeCategoryName", "UICTContentSizeCategoryAccessibilityXXXL"
+        ]
+        XCUIDevice.shared.orientation = .portrait
+        app.launch()
+        XCTAssertTrue(app.buttons["Take Photo"].waitForExistence(timeout: 10))
+        XCTAssertFalse(app.staticTexts["camera.detectedOrientation"].exists)
+        XCTAssertTrue(app.buttons["Take Photo"].isHittable)
+
+        defer { XCUIDevice.shared.orientation = .portrait }
+        for (orientation, value) in [
+            (UIDeviceOrientation.portrait, "Vertical"),
+            (.landscapeLeft, "Horizontal · top to left"),
+            (.landscapeRight, "Horizontal · top to right")
+        ] {
+            XCUIDevice.shared.orientation = orientation
+            XCTAssertTrue(app.buttons["Take Photo"].isHittable)
+            let attachment = XCTAttachment(screenshot: app.screenshot())
+            attachment.name = "Camera labels large text · \(value)"
+            attachment.lifetime = .keepAlways
+            add(attachment)
+        }
+#else
+        throw XCTSkip("Large-text camera layout is checked in the simulator.")
+#endif
+    }
+
+    @MainActor
+    func testCameraModeOptionsRotateAndApplySelection() throws {
+#if targetEnvironment(simulator)
+        try verifyCameraModeOptions(largeText: false)
+#else
+        throw XCTSkip("Physical camera mode changes require manual hardware verification.")
+#endif
+    }
+
+    @MainActor
+    func testCameraModeOptionsRemainReachableWithLargeText() throws {
+#if targetEnvironment(simulator)
+        try verifyCameraModeOptions(largeText: true)
+#else
+        throw XCTSkip("Large-text camera submenu layout is checked in the simulator.")
+#endif
+    }
+
+    @MainActor
+    func testCameraModeOptionsPortraitLayout() throws {
+#if targetEnvironment(simulator)
+        try verifyCameraModeOptions(largeText: true, onlyPortrait: true)
+#else
+        throw XCTSkip("Portrait submenu layout is checked in the simulator.")
+#endif
+    }
+
+    @MainActor
+    private func verifyCameraModeOptions(largeText: Bool, onlyPortrait: Bool = false) throws {
+        let app = XCUIApplication()
+        app.launchArguments = ["-hasCompletedOnboarding", "YES"]
+        if largeText {
+            app.launchArguments += ["-UIPreferredContentSizeCategoryName", "UICTContentSizeCategoryAccessibilityXXXL"]
+        }
+        defer { XCUIDevice.shared.orientation = .portrait }
+        XCUIDevice.shared.orientation = .portrait
+        app.launch()
+        XCTAssertTrue(app.buttons["Take Photo"].waitForExistence(timeout: 10))
+        XCTAssertFalse(app.staticTexts["camera.detectedOrientation"].exists)
+        let positions = [
+            (UIDeviceOrientation.landscapeLeft, "Horizontal · top to left"),
+            (.landscapeRight, "Horizontal · top to right"),
+            (.portraitUpsideDown, "Vertical · upside down"),
+            (.portrait, "Vertical")
+        ]
+        for (orientation, value) in onlyPortrait ? Array(positions.suffix(1)) : positions {
+            XCUIDevice.shared.orientation = orientation
+            for (quickControl, modeLabel, closeLabel) in [
+                ("camera.quick.exposure", "Exposure mode", "Close exposure control"),
+                ("camera.quick.focus", "Focus mode", "Close focus control"),
+                ("camera.quick.whiteBalance", "White balance mode", "Close white balance control")
+            ] {
+                app.buttons[quickControl].tap()
+                let modeButton = app.buttons[modeLabel]
+                XCTAssertTrue(modeButton.waitForExistence(timeout: 5))
+                XCTAssertGreaterThanOrEqual(modeButton.frame.height, 44)
+                modeButton.tap()
+                let automatic = app.buttons["\(modeLabel).Automatic"]
+                let manual = app.buttons["\(modeLabel).Manual"]
+                XCTAssertTrue(automatic.waitForExistence(timeout: 5))
+                XCTAssertTrue(automatic.isHittable)
+                XCTAssertTrue(manual.isHittable)
+                XCTAssertTrue(app.frame.contains(automatic.frame))
+                XCTAssertTrue(app.frame.contains(manual.frame))
+                XCTAssertEqual(automatic.value as? String, "Selected")
+                XCTAssertLessThan(app.frame.width, app.frame.height)
+                let attachment = XCTAttachment(screenshot: app.screenshot())
+                attachment.name = "\(modeLabel) options · \(value) · large text \(largeText)"
+                attachment.lifetime = .keepAlways
+                add(attachment)
+                manual.tap()
+                expectation(for: NSPredicate(format: "value == 'Manual'"), evaluatedWith: modeButton)
+                waitForExpectations(timeout: 5)
+                modeButton.tap()
+                XCTAssertTrue(manual.waitForExistence(timeout: 5))
+                XCTAssertEqual(manual.value as? String, "Selected")
+                automatic.tap()
+                expectation(for: NSPredicate(format: "value == 'Automatic'"), evaluatedWith: modeButton)
+                waitForExpectations(timeout: 5)
+                app.buttons[closeLabel].tap()
+                XCTAssertTrue(app.buttons[quickControl].waitForExistence(timeout: 5))
+            }
+        }
+    }
+
+    @MainActor
+    func testFlashOptionsRotateAndApplySelection() throws {
+        let app = XCUIApplication()
+        app.launchArguments = ["-hasCompletedOnboarding", "YES",
+            "-UIPreferredContentSizeCategoryName", "UICTContentSizeCategoryAccessibilityXXXL"]
+        defer { XCUIDevice.shared.orientation = .portrait }
+        XCUIDevice.shared.orientation = .portrait
+        app.launch()
+        XCTAssertTrue(app.buttons["Take Photo"].waitForExistence(timeout: 10))
+        let flash = app.buttons["Flash"]
+        for orientation in [UIDeviceOrientation.portrait, .landscapeLeft, .landscapeRight, .portraitUpsideDown] {
+            XCUIDevice.shared.orientation = orientation
+            flash.tap()
+            for title in ["Auto", "On", "Off"] {
+                let option = app.buttons["camera.flash.\(title.lowercased())"]
+                XCTAssertTrue(option.waitForExistence(timeout: 3))
+                XCTAssertTrue(option.isHittable)
+                XCTAssertTrue(app.frame.contains(option.frame))
+                if title == "Auto" {
+                    let attachment = XCTAttachment(screenshot: app.screenshot())
+                    attachment.name = "Flash options \(orientation.rawValue)"
+                    attachment.lifetime = .keepAlways
+                    add(attachment)
+                }
+                option.tap()
+                XCTAssertEqual(flash.value as? String, title)
+                XCTAssertFalse(option.exists)
+                flash.tap()
+                XCTAssertEqual(app.buttons["camera.flash.\(title.lowercased())"].value as? String, "Selected")
+            }
+            app.coordinate(withNormalizedOffset: CGVector(dx: 0.3, dy: 0.5)).tap()
+            XCTAssertFalse(app.buttons["camera.flash.off"].exists)
+            XCTAssertLessThan(app.frame.width, app.frame.height)
+        }
+    }
+
+    @MainActor
+    func testLensSelectorOpensAndClosesInEveryOrientation() throws {
+#if targetEnvironment(simulator)
+        let app = XCUIApplication()
+        app.launchArguments = ["-hasCompletedOnboarding", "YES"]
+        defer { XCUIDevice.shared.orientation = .portrait }
+        XCUIDevice.shared.orientation = .portrait
+        app.launch()
+        XCTAssertTrue(app.buttons["Take Photo"].waitForExistence(timeout: 10))
+        XCTAssertFalse(app.staticTexts["camera.detectedOrientation"].exists)
+        for (orientation, value) in [
+            (UIDeviceOrientation.landscapeLeft, "Horizontal · top to left"),
+            (.landscapeRight, "Horizontal · top to right"),
+            (.portraitUpsideDown, "Vertical · upside down"),
+            (.portrait, "Vertical")
+        ] {
+            XCUIDevice.shared.orientation = orientation
+            app.buttons["Choose camera lens"].tap()
+            let close = app.buttons["Close lens selection"]
+            XCTAssertTrue(close.waitForExistence(timeout: 5))
+            XCTAssertTrue(close.isHittable)
+            XCTAssertTrue(app.buttons["Virtual camera devices"].exists)
+            XCTAssertFalse(app.buttons["Virtual camera devices"].isEnabled)
+            XCTAssertLessThan(app.frame.width, app.frame.height)
+            close.tap()
+            XCTAssertTrue(app.buttons["Choose camera lens"].waitForExistence(timeout: 5))
+        }
+#else
+        throw XCTSkip("Simulator checks layout and dismissal; verify physical lens selection on iPhone.")
+#endif
+    }
+
+    @MainActor
     func testExample() throws {
         // UI tests must launch the application that they test.
         let app = XCUIApplication()

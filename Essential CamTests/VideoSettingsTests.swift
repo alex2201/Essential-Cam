@@ -2,7 +2,7 @@
 //  VideoSettingsTests.swift
 //  Essential CamTests
 //
-//  Created by Codex.
+//  Created by Alexander López.
 //
 
 import Foundation

@@ -11,9 +11,11 @@ struct CameraCaptureView: View {
     @Environment(CameraPresetStore.self) private var presetStore
 
     let viewModel: CameraViewModel
+    var iconOrientation: CaptureOrientation? = nil
     let showSettings: () -> Void
     let showGallery: () -> Void
 
+    @State private var isFlashOptionsPresented = false
     @State private var zoomFactorAtGestureStart: Double?
     @State private var displayedCapturePreview: CapturedPhotoPreview?
     @State private var isCapturePreviewFlyingToGallery = false
@@ -57,13 +59,6 @@ struct CameraCaptureView: View {
                 CameraControlsOverlayView(viewModel: viewModel)
                     .allowsHitTesting(!viewModel.isCameraInteractionDisabled)
             }
-            .overlay(alignment: .topTrailing) {
-                if viewModel.selectedCaptureMode == .photo {
-                    CameraFlashButton(controls: viewModel.controls)
-                        .padding(8)
-                        .disabled(viewModel.isCameraInteractionDisabled)
-                }
-            }
             .overlay(alignment: .topLeading) {
                 CameraSettingsButton(action: showSettings)
                     .disabled(viewModel.isCameraInteractionDisabled)
@@ -73,8 +68,16 @@ struct CameraCaptureView: View {
                 if let startedAt = viewModel.recordingStartedAt {
                     TimelineView(.periodic(from: startedAt, by: 1)) { context in
                         let seconds = max(0, Int(context.date.timeIntervalSince(startedAt)))
-                        Label(String(format: "%02d:%02d", seconds / 60, seconds % 60), systemImage: "record.circle.fill")
+                        Label {
+                            Text(String(format: "%02d:%02d", seconds / 60, seconds % 60))
+                        } icon: {
+                            Image(systemName: "record.circle.fill")
+                        }
                             .font(.body.monospacedDigit().weight(.semibold))
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.5)
+                            .cameraControlContentRotation()
+                            .frame(width: 100, height: 44)
                             .foregroundStyle(.white)
                             .padding(.horizontal, 12)
                             .padding(.vertical, 8)
@@ -104,6 +107,7 @@ struct CameraCaptureView: View {
                         Text(notice).font(.footnote).multilineTextAlignment(.center)
                         Button("OK") { viewModel.controls.clearConfigurationNotice() }
                     }
+                    .cameraControlContentRotation()
                     .padding()
                     .background(.regularMaterial, in: .rect(cornerRadius: 12))
                     .padding(40)
@@ -167,6 +171,7 @@ struct CameraCaptureView: View {
                         .font(.system(size: 96, weight: .semibold, design: .rounded))
                         .foregroundStyle(.white)
                         .contentTransition(.numericText(countsDown: true))
+                        .cameraIconRotation()
                         .shadow(color: .black.opacity(0.65), radius: 8)
                         .allowsHitTesting(false)
                         .accessibilityLabel("Photo in \(countdown) seconds")
@@ -206,6 +211,29 @@ struct CameraCaptureView: View {
                 displayedCapturePreview = nil
             }
         }
+        .overlay {
+            if isFlashOptionsPresented {
+                Color.clear
+                    .contentShape(Rectangle())
+                    .onTapGesture { isFlashOptionsPresented = false }
+                    .accessibilityHidden(true)
+            }
+        }
+        .overlay(alignment: .topTrailing) {
+            if viewModel.selectedCaptureMode == .photo {
+                CameraFlashButton(controls: viewModel.controls, isExpanded: $isFlashOptionsPresented)
+                    .padding(8)
+                    .disabled(viewModel.isCameraInteractionDisabled)
+            }
+        }
+        .onChange(of: viewModel.isCameraInteractionDisabled) { _, disabled in
+            if disabled { isFlashOptionsPresented = false }
+        }
+        .onChange(of: viewModel.selectedCaptureMode) { _, _ in
+            isFlashOptionsPresented = false
+        }
+        .onDisappear { isFlashOptionsPresented = false }
+        .environment(\.cameraIconRotationDegrees, iconOrientation?.controlRotationDegrees ?? 0)
     }
 
     private var zoomGesture: some Gesture {
@@ -319,6 +347,7 @@ private struct GalleryThumbnailStack: View {
         ZStack {
             if thumbnails.isEmpty {
                 Image(systemName: "photo.on.rectangle.angled")
+                    .cameraIconRotation()
                     .font(.system(size: 20, weight: .semibold))
                     .foregroundStyle(.white)
             } else {
@@ -388,6 +417,7 @@ private struct GalleryThumbnailCard: View {
             .overlay {
                 if thumbnail.isVideo {
                     Image(systemName: "play.circle.fill")
+                        .cameraIconRotation()
                         .font(.system(size: 18))
                         .symbolRenderingMode(.palette)
                         .foregroundStyle(.white, .black.opacity(0.6))

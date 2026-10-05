@@ -8,6 +8,7 @@
 import SwiftUI
 
 struct CameraPresetCarouselView: View {
+    @Environment(\.cameraIconRotationDegrees) private var rotationDegrees
     let store: CameraPresetStore
     let controls: CameraControlsController
 
@@ -33,7 +34,11 @@ struct CameraPresetCarouselView: View {
                 Text("No presets available")
                     .font(.caption.weight(.medium))
                     .foregroundStyle(.white.opacity(0.78))
+                    .lineLimit(abs(rotationDegrees) == 90 ? 3 : 1)
+                    .minimumScaleFactor(0.25)
+                    .multilineTextAlignment(.center)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .cameraControlContentRotation()
             } else {
                 TabView(selection: displayedPresetID) {
                     presetLabel("No preset", accessibilityValue: "No preset")
@@ -71,6 +76,7 @@ struct CameraPresetCarouselView: View {
             displayedPresetID.wrappedValue = destination == 0 ? nil : store.modePresets[destination - 1].id
         } label: {
             Image(systemName: systemName)
+                .cameraIconRotation()
                 .font(.caption.weight(.bold))
                 .foregroundStyle(.white)
                 .frame(width: 32, height: 44)
@@ -86,10 +92,12 @@ struct CameraPresetCarouselView: View {
         Text(text)
             .font(.subheadline.weight(.semibold))
             .foregroundStyle(.white)
-            .lineLimit(1)
-            .minimumScaleFactor(0.75)
+            .lineLimit(abs(rotationDegrees) == 90 ? 3 : 1)
+            .multilineTextAlignment(.center)
+            .minimumScaleFactor(0.25)
             .padding(.horizontal, 4)
             .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .cameraControlContentRotation()
             .accessibilityLabel("Camera preset")
             .accessibilityValue(accessibilityValue)
     }

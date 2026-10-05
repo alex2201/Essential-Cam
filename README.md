@@ -7,6 +7,7 @@ The project focuses on capturing clean, editing-ready photos with Apple's camera
 ## Features
 
 - Live camera preview with a portrait-only interface
+- Device-orientation detection and in-place camera-icon and text rotation for vertical, upside-down, and horizontal positioning toward either side
 - Photo capture and automatic saving to the Photo Library
 - SDR video recording with microphone audio, supported 1080p/4K resolutions and 24/25/30/50/60 fps
 - H.264/HEVC video codecs, supported stabilization modes, and continuous light when available
@@ -137,6 +138,35 @@ videos with in-app playback. HDR, Log, ProRes, and changes during recording are
 outside this release.
 
 > The iOS Simulator does not provide the same camera hardware or capabilities as a physical iPhone. Use a real device when testing capture, flash, focus, exposure, white balance, and lens selection.
+
+### Device orientation
+
+The interface remains locked to portrait when the phone is turned; its layout
+does not rotate or trigger the system screen-rotation animation. Camera icons and control text
+rotate in place by 90 degrees toward either side, or 180 degrees upside down,
+while their frames, backgrounds, and touch targets stay fixed.
+Horizontal left/right refer to the direction the **top of the phone** points when
+looking at its screen. Flat or unknown readings retain the last valid orientation;
+before any valid reading, controls retain their default portrait rotation. Detection runs
+while the camera screen is active and refreshes on foreground return.
+
+Artificial rotation applies only to the camera view and its inline controls.
+Gallery, Settings, onboarding, and other screens keep their normal portrait
+presentation. Photo thumbnails remain unchanged.
+Exposure, focus, and white-balance mode selectors use inline Automatic/Manual
+options that rotate with the camera controls, preserving capability-based disabled
+states and selection indicators. Flash also uses inline Off/Auto/On options that
+rotate in place and close after selection or a tap outside. Camera choice panels
+reserve their row dimensions before rotating text, including lens, aspect-ratio,
+timer, resolution, and video selectors. System alerts retain their standard presentation.
+
+The committed next stage will orient captured media while preserving preview
+geometry and the fixed interface layout.
+Photos will use the orientation at the actual shutter boundary, after any timer.
+Videos will reserve their orientation before asynchronous recording preparation
+and keep it fixed through finalization, even if the phone moves. Control labels
+continue to follow the device independently. Capture orientation is not yet
+implemented; control rotation does not change capture or preview behavior.
 
 ## Architecture
 

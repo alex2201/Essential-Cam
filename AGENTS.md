@@ -39,7 +39,11 @@
 
 ## UI rules
 
-- Essential Cam supports only portrait (vertical) UI. Landscape (horizontal) UI is outside the product scope. Keep UI automation, screenshots, layout checks, and manual UI validation in portrait; do not introduce landscape use cases or requirements.
+- Keep the interface and its layout locked to portrait, without system screen-rotation animations. Support holding the device vertically, horizontally toward either side, and upside down. Icons and text will rotate in place to remain readable; controls, backgrounds, preview geometry, and touch targets keep their positions.
+- Apply artificial icon/text rotation only within the camera capture view, including its inline control overlays. Gallery, Settings, onboarding, and other screens remain in their normal portrait presentation. Keep rotation state scoped to the camera subtree so shared controls do not rotate on other screens.
+- Detect physical device orientation independently of interface orientation. Preserve the last valid orientation when the device is flat or its orientation is unknown; keep orientation undetermined internally and controls upright until the first valid reading. Refresh detection when returning to the foreground.
+- Orient photos at the actual shutter boundary (after any timer). Fix video orientation for each recording before asynchronous preparation and keep it fixed through recording finalization, including interruption and failure paths. Control-label orientation remains independent of the recording's orientation.
+- Validate the portrait layout with the device held in all four supported orientations. UI automation and screenshots must retain the portrait interface; physical horizontal positioning is supported and must not trigger a landscape layout.
 - Preserve accessible labels, values, and selection states for camera controls. Verify changed layouts with larger text in portrait.
 - Reflect active hardware capabilities and capture state in enabled/disabled controls. Surface recoverable failures with a clear retry or discard path when applicable.
 

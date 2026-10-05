@@ -2,7 +2,7 @@
 //  PhotoGalleryView.swift
 //  Essential Cam
 //
-//  Created by Codex on 27/09/26.
+//  Created by Alexander López on 27/09/26.
 //
 
 import AVKit

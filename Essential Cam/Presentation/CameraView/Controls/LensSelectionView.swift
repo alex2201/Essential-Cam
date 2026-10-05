@@ -2,7 +2,7 @@
 //  LensSelectionView.swift
 //  Essential Cam
 //
-//  Created by Codex on 25/09/26.
+//  Created by Alexander López on 25/09/26.
 //
 
 import SwiftUI
@@ -26,6 +26,9 @@ struct LensSelectorButton: View {
                     .foregroundStyle(.white.opacity(0.78))
             }
             .foregroundStyle(.white)
+            .lineLimit(1)
+            .minimumScaleFactor(0.65)
+            .cameraControlContentRotation()
             .frame(maxWidth: .infinity)
             .frame(height: 52)
             .contentShape(Rectangle())
@@ -52,6 +55,9 @@ struct ZoomSelectorButton: View {
                     .foregroundStyle(.white.opacity(0.78))
             }
             .foregroundStyle(.white)
+            .lineLimit(1)
+            .minimumScaleFactor(0.65)
+            .cameraControlContentRotation()
             .frame(maxWidth: .infinity)
             .frame(height: 52)
             .contentShape(Rectangle())
@@ -99,6 +105,7 @@ struct CameraSelectionControlsView: View {
 
             Button(action: toggleCameraPosition) {
                 Image(systemName: "arrow.triangle.2.circlepath.camera")
+                    .cameraIconRotation()
                     .font(.system(size: 17, weight: .semibold))
                     .foregroundStyle(.white)
                     .frame(maxWidth: .infinity)
@@ -127,6 +134,7 @@ struct ZoomSelectionView: View {
         VStack(spacing: 12) {
             VStack(spacing: 0) {
                 Image(systemName: "plus.magnifyingglass")
+                    .cameraIconRotation()
                     .font(.system(size: 15, weight: .semibold))
                     .foregroundStyle(.white)
                     .frame(width: 45, height: 36)
@@ -150,7 +158,10 @@ struct ZoomSelectionView: View {
                                     ? Color.yellow
                                     : Color.white
                             )
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.65)
                             .frame(width: 45, height: 44)
+                            .cameraControlContentRotation()
                             .contentShape(Rectangle())
                     }
                     .buttonStyle(.plain)
@@ -164,6 +175,7 @@ struct ZoomSelectionView: View {
 
             Button(action: dismiss) {
                 Image(systemName: "xmark")
+                    .cameraIconRotation()
                     .font(.system(size: 13, weight: .semibold))
                     .foregroundStyle(.white)
                     .frame(width: 36, height: 36)
@@ -199,6 +211,7 @@ struct LensSelectionView: View {
                 }
             } label: {
                 Image(systemName: "camera.viewfinder.badge.automatic")
+                    .cameraIconRotation()
                     .font(.system(size: 15, weight: .semibold))
                     .foregroundStyle(selectedCamera?.isVirtual == true ? Color.yellow : Color.white)
                     .frame(width: 36, height: 36)
@@ -213,6 +226,7 @@ struct LensSelectionView: View {
 
             VStack(spacing: 0) {
                 Image(systemName: "camera.fill")
+                    .cameraIconRotation()
                     .font(.system(size: 15, weight: .semibold))
                     .foregroundStyle(.white)
                     .frame(width: 45, height: 28)
@@ -224,6 +238,7 @@ struct LensSelectionView: View {
                         .font(.system(size: 13, weight: .semibold, design: .rounded))
                         .foregroundStyle(.white.opacity(0.6))
                         .frame(width: 45, height: 44)
+                        .cameraControlContentRotation()
                         .accessibilityLabel("No virtual camera devices available")
                 } else {
                     ForEach(Array(sortedCameras.enumerated()), id: \.element.id) { index, camera in
@@ -239,7 +254,10 @@ struct LensSelectionView: View {
                                 .foregroundStyle(
                                     camera.id == selectedCamera?.id ? Color.yellow : Color.white
                                 )
+                                .lineLimit(1)
+                                .minimumScaleFactor(0.65)
                                 .frame(width: 45, height: 44)
+                                .cameraControlContentRotation()
                                 .contentShape(Rectangle())
                         }
                         .buttonStyle(.plain)
@@ -254,6 +272,7 @@ struct LensSelectionView: View {
 
             Button(action: dismiss) {
                 Image(systemName: "xmark")
+                    .cameraIconRotation()
                     .font(.system(size: 13, weight: .semibold))
                     .foregroundStyle(.white)
                     .frame(width: 36, height: 36)

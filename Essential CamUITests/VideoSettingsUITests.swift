@@ -2,7 +2,7 @@
 //  VideoSettingsUITests.swift
 //  Essential CamUITests
 //
-//  Created by Codex.
+//  Created by Alexander López.
 //
 
 import XCTest

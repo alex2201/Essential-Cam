@@ -2,12 +2,13 @@
 //  CameraControlEditors.swift
 //  Essential Cam
 //
-//  Created by Codex on 27/09/26.
+//  Created by Alexander López on 27/09/26.
 //
 
 import SwiftUI
 
 struct ExposureControlEditor: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     let controls: CameraControlsController
     let dismiss: () -> Void
 
@@ -20,7 +21,7 @@ struct ExposureControlEditor: View {
             modeMenu
             CameraControlEditorSeparator()
 
-            Group {
+            ZStack {
                 switch mode {
                 case .automatic:
                     CameraValueDial(
@@ -33,13 +34,15 @@ struct ExposureControlEditor: View {
                         showsBackground: false
                     )
                     .frame(width: 50, height: 280)
+                    .transition(.opacity)
                 case .manual:
                     manualDials
+                        .transition(.opacity)
                 }
             }
-            .transition(.opacity)
+            .frame(height: 280)
         }
-        .animation(.easeInOut(duration: 0.25), value: mode)
+        .animation(reduceMotion ? .easeInOut(duration: 0.2) : .smooth(duration: 0.4), value: mode)
     }
 
     private var modeMenu: some View {
@@ -139,6 +142,7 @@ struct ExposureControlEditor: View {
 }
 
 struct FocusControlEditor: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     let controls: CameraControlsController
     let dismiss: () -> Void
 
@@ -158,21 +162,23 @@ struct FocusControlEditor: View {
             )
 
             if mode == .manual {
-                CameraControlEditorSeparator()
-                CameraValueDial(
-                    value: manualFocusPosition,
-                    range: 0...1,
-                    step: 0.01,
-                    title: "FOCUS",
-                    orientation: .vertical,
-                    valueFormatter: formatFocusPosition,
-                    showsBackground: false
-                )
-                .frame(width: 50, height: 280)
+                VStack(spacing: 4) {
+                    CameraControlEditorSeparator()
+                    CameraValueDial(
+                        value: manualFocusPosition,
+                        range: 0...1,
+                        step: 0.01,
+                        title: "FOCUS",
+                        orientation: .vertical,
+                        valueFormatter: formatFocusPosition,
+                        showsBackground: false
+                    )
+                    .frame(width: 50, height: 280)
+                }
                 .transition(.opacity)
             }
         }
-        .animation(.easeInOut(duration: 0.25), value: mode)
+        .animation(reduceMotion ? .easeInOut(duration: 0.2) : .smooth(duration: 0.4), value: mode)
     }
 
     private var manualFocusPosition: Binding<Double> {
@@ -204,6 +210,7 @@ struct FocusControlEditor: View {
 }
 
 struct WhiteBalanceControlEditor: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     let controls: CameraControlsController
     let dismiss: () -> Void
 
@@ -223,12 +230,14 @@ struct WhiteBalanceControlEditor: View {
             )
 
             if mode == .manual {
-                CameraControlEditorSeparator()
-                manualDials
-                    .transition(.opacity)
+                VStack(spacing: 4) {
+                    CameraControlEditorSeparator()
+                    manualDials
+                }
+                .transition(.opacity)
             }
         }
-        .animation(.easeInOut(duration: 0.25), value: mode)
+        .animation(reduceMotion ? .easeInOut(duration: 0.2) : .smooth(duration: 0.4), value: mode)
     }
 
     private var manualDials: some View {
@@ -323,6 +332,7 @@ private struct CameraControlEditorContainer<Content: View>: View {
 
             Button(action: dismiss) {
                 Image(systemName: "xmark")
+                    .cameraIconRotation()
                     .font(.system(size: 13, weight: .semibold))
                     .foregroundStyle(.white)
                     .frame(width: 36, height: 36)
@@ -336,7 +346,12 @@ private struct CameraControlEditorContainer<Content: View>: View {
     }
 }
 
+/// Inline options keep camera mode choices oriented with the capture controls.
 private struct CameraControlModeMenu: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.cameraIconRotationDegrees) private var rotationDegrees
+    @State private var isExpanded = false
+
     let mode: CameraControlEditorMode
     let accessibilityLabel: String
     var automaticEnabled = true
@@ -344,40 +359,86 @@ private struct CameraControlModeMenu: View {
     let useAutomatic: () -> Void
     let useManual: () -> Void
 
-    var body: some View {
-        Menu {
-            Button(action: useAutomatic) {
-                settingLabel("Automatic", isSelected: mode == .automatic)
-            }
-            .disabled(!automaticEnabled)
+    private var isHorizontal: Bool { abs(rotationDegrees) == 90 }
 
-            Button(action: useManual) {
-                settingLabel("Manual", isSelected: mode == .manual)
+    var body: some View {
+        VStack(spacing: isExpanded ? 4 : 0) {
+            Button {
+                withAnimation(expansionAnimation) { isExpanded.toggle() }
+            } label: {
+                HStack(spacing: 4) {
+                    Text(mode.displayName)
+                    Image(systemName: isExpanded ? "chevron.up" : "chevron.down")
+                        .font(.system(size: 9, weight: .semibold))
+                }
+                .font(.system(size: 12, weight: .semibold, design: .rounded))
+                .foregroundStyle(.white)
+                .lineLimit(1)
+                .minimumScaleFactor(0.8)
+                .frame(maxWidth: .infinity, minHeight: 60)
+                .cameraControlContentRotation()
+                .contentShape(Rectangle())
             }
-            .disabled(!manualEnabled)
-        } label: {
-            HStack(spacing: 2) {
-                Text(mode.displayName)
-                Image(systemName: "chevron.up.chevron.down")
-                    .font(.system(size: 8, weight: .semibold))
+            .buttonStyle(.plain)
+            .accessibilityLabel(accessibilityLabel)
+            .accessibilityValue(mode == .automatic ? "Automatic" : "Manual")
+            .accessibilityHint(isExpanded ? "Hides mode options" : "Shows mode options")
+
+            VStack(spacing: 4) {
+                modeOption(.automatic, title: "Automatic", enabled: automaticEnabled, action: useAutomatic)
+                modeOption(.manual, title: "Manual", enabled: manualEnabled, action: useManual)
             }
-            .font(.system(size: 11, weight: .semibold, design: .rounded))
-            .foregroundStyle(.white)
-            .frame(maxWidth: .infinity, minHeight: 34)
-            .contentShape(Rectangle())
-            .padding(.horizontal, 4)
-            .padding(.top, 4)
+            .frame(height: isExpanded ? (isHorizontal ? 204 : 124) : 0, alignment: .top)
+            .clipped()
+            .opacity(isExpanded ? 1 : 0)
+            .allowsHitTesting(isExpanded)
+            .accessibilityHidden(!isExpanded)
+
         }
-        .accessibilityLabel(accessibilityLabel)
+        .padding(.horizontal, 4)
+        .padding(.top, 4)
+        .onChange(of: mode) { _, _ in
+            withAnimation(expansionAnimation) { isExpanded = false }
+        }
     }
 
-    @ViewBuilder
-    private func settingLabel(_ title: String, isSelected: Bool) -> some View {
-        if isSelected {
-            Label(title, systemImage: "checkmark")
-        } else {
-            Text(title)
+    private var expansionAnimation: Animation {
+        reduceMotion ? .easeInOut(duration: 0.2) : .smooth(duration: 0.4)
+    }
+
+    private func modeOption(
+        _ option: CameraControlEditorMode,
+        title: String,
+        enabled: Bool,
+        action: @escaping () -> Void
+    ) -> some View {
+        Button {
+            withAnimation(expansionAnimation) {
+                isExpanded = false
+                action()
+            }
+        } label: {
+            VStack(spacing: 4) {
+                Image(systemName: mode == option ? "checkmark.circle.fill" : "circle")
+                    .font(.system(size: 13))
+                Text(title)
+                    .font(.system(size: 12, weight: .medium))
+            }
+            .foregroundStyle(mode == option ? Color.yellow : Color.white)
+            .lineLimit(1)
+            .minimumScaleFactor(0.5)
+            .frame(maxWidth: .infinity, minHeight: isHorizontal ? 100 : 60)
+            .cameraControlContentRotation()
+            .contentShape(Rectangle())
+            .background(.white.opacity(mode == option ? 0.12 : 0.04), in: .rect(cornerRadius: 8))
         }
+        .buttonStyle(.plain)
+        .disabled(!enabled)
+        .opacity(enabled ? 1 : 0.4)
+        .accessibilityLabel(title)
+        .accessibilityIdentifier("\(accessibilityLabel).\(title)")
+        .accessibilityValue(mode == option ? "Selected" : "Not selected")
+        .accessibilityAddTraits(mode == option ? .isSelected : [])
     }
 }
 
