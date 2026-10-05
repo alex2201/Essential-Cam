@@ -8,6 +8,8 @@
 import Foundation
 
 protocol VideoCaptureService: CameraCaptureComponent {
+    func configure(_ settings: VideoSettings) throws
+    var availableCodecs: [VideoCodec] { get }
     func record(to url: URL, didStart: @escaping @Sendable () -> Void) async throws
     func stopRecording()
 }

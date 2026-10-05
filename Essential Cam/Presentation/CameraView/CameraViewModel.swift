@@ -31,9 +31,12 @@ final class CameraViewModel {
     private(set) var hasPendingVideo = false
     private(set) var recordingStartedAt: Date?
     private(set) var captureCountdown: Int?
-    private(set) var selectedCaptureMode: CaptureMode = .photo
+    var selectedCaptureMode: CaptureMode { controls.captureMode }
     private(set) var isCheckingVideoPermissions = false
     private(set) var videoPermissionsGranted = false
+    private(set) var isEditingSettings = false
+    private var settingsEntryMode: CaptureMode?
+    private var isEndingSettingsEditing = false
 
     var preferredVirtualCamera: Camera? {
         availableVirtualCameras.max {
@@ -79,7 +82,7 @@ final class CameraViewModel {
     }
 
     var isCameraInteractionDisabled: Bool {
-        operation != .none || cameraStatus != .running || hasPendingPhoto || hasPendingVideo
+        operation != .none || controls.isApplyingConfiguration || cameraStatus != .running || hasPendingPhoto || hasPendingVideo
     }
 
     var isRecordingVideo: Bool { operation == .recordingVideo }
@@ -161,6 +164,10 @@ final class CameraViewModel {
     }
 
     func handleScenePhase(isActive: Bool, isBackground: Bool) async {
+#if targetEnvironment(simulator)
+        _ = lifecycle.updateScene(isActive: isActive, isBackground: isBackground)
+        cameraStatus = .running
+#else
         if isBackground, isVideoCaptureInProgress, videoBackgroundTask == .invalid {
             videoBackgroundTask = UIApplication.shared.beginBackgroundTask(withName: "Finish video") { [weak self] in
                 Task { @MainActor in self?.endVideoBackgroundTask() }
@@ -189,19 +196,49 @@ final class CameraViewModel {
         if selectedCaptureMode == .video, operation == .none {
             await checkVideoPermissions()
         }
+#endif
     }
 
-    func selectCaptureMode(_ mode: CaptureMode) {
-        guard !isCheckingVideoPermissions, operation == .none, !hasPendingPhoto, !hasPendingVideo else { return }
-        selectedCaptureMode = mode
+    func beginSettingsEditing() {
+        guard !isEditingSettings else { return }
+        settingsEntryMode = selectedCaptureMode
+        isEditingSettings = true
+    }
+
+    func endSettingsEditing() async {
+        guard isEditingSettings, !isEndingSettingsEditing else { return }
+        isEndingSettingsEditing = true
+        defer { isEndingSettingsEditing = false }
+        // A profile editor may still be finishing a device configuration when dismissed.
+        while controls.isApplyingConfiguration || operation == .switchingCamera {
+            await Task.yield()
+        }
+        if let settingsEntryMode {
+            await selectCaptureMode(settingsEntryMode)
+        }
+        settingsEntryMode = nil
+        isEditingSettings = false
+#if !targetEnvironment(simulator)
+        await checkVideoPermissions()
+#endif
+    }
+
+    func selectCaptureMode(_ mode: CaptureMode) async {
+        guard !isCheckingVideoPermissions, operation == .none, !hasPendingPhoto, !hasPendingVideo,
+              !controls.isApplyingConfiguration, mode != selectedCaptureMode else { return }
+        operation = .switchingCamera
+        defer { finishOperation() }
         videoPermissionsGranted = false
-        if case .videoPermissionRequired = activeAlert {
-            activeAlert = nil
+        if case .videoPermissionRequired = activeAlert { activeAlert = nil }
+        await controls.switchCaptureMode(mode)
+        if selectedCaptureMode == .photo {
+            await refreshPhotoOutputFormats()
+            await refreshPhotoResolutions()
         }
     }
 
     func checkVideoPermissions(requestIfNeeded: Bool = true) async {
-        guard selectedCaptureMode == .video, !isCheckingVideoPermissions, operation == .none else { return }
+        guard selectedCaptureMode == .video, !isEditingSettings, !isCheckingVideoPermissions, operation == .none else { return }
         isCheckingVideoPermissions = true
         videoPermissionsGranted = false
         defer { isCheckingVideoPermissions = false }
@@ -263,6 +300,7 @@ final class CameraViewModel {
                 }
                 try Task.checkCancellation()
                 guard lifecycle.isSceneActive, cameraStatus == .running else { return }
+                _ = try await cameraSession.prepare(controls.settings)
                 try await videoCoordinator.record(didStart: { [weak self] in
                     Task { @MainActor in
                         guard let self, self.activeRecordingID == recordingID, self.operation == .startingVideo else { return }
@@ -650,6 +688,7 @@ final class CameraViewModel {
 
 
     private func refreshPhotoOutputFormats() async {
+        guard selectedCaptureMode == .photo else { return }
         availablePhotoOutputFormats = await cameraSession.availablePhotoOutputFormats()
         if !availablePhotoOutputFormats.contains(controls.settings.photoOutputFormat),
            let fallback = availablePhotoOutputFormats.first {
@@ -658,6 +697,7 @@ final class CameraViewModel {
     }
 
     private func refreshPhotoResolutions() async {
+        guard selectedCaptureMode == .photo else { return }
         availablePhotoResolutions = await cameraSession.availablePhotoResolutions()
         guard let largestResolution = availablePhotoResolutions.last else {
             controls.setPhotoResolution(nil)

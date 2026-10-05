@@ -1,3 +1,10 @@
+//
+//  CameraPresetStore.swift
+//  Essential Cam
+//
+//  Created by Alexander López.
+//
+
 import Foundation
 import Observation
 
@@ -5,8 +12,15 @@ import Observation
 @Observable
 final class CameraPresetStore: CameraPresetsLoading {
     private(set) var presets: [CameraPreset]
-    private(set) var selectedPresetID: CameraPreset.ID?
-    private(set) var unselectedSettings: CameraSettings
+    private(set) var captureMode = CaptureMode.photo
+    private var selections: [CaptureMode: CameraPreset.ID] = [:]
+    private var manualProfiles = CaptureSettingsProfiles()
+    private var selectionSnapshots: [CaptureMode: CameraSettings] = [:]
+    var selectedPresetID: CameraPreset.ID? { selections[captureMode] }
+    var unselectedSettings: CameraSettings { manualProfiles[captureMode] }
+    var modePresets: [CameraPreset] { presets.filter { $0.captureMode == captureMode } }
+
+    func activate(_ mode: CaptureMode) { captureMode = mode }
     private(set) var persistenceErrorDescription: String?
 
     private let repository: any CameraPresetRepository
@@ -21,9 +35,9 @@ final class CameraPresetStore: CameraPresetsLoading {
         repository: any CameraPresetRepository = JSONCameraPresetRepository()
     ) {
         self.presets = presets
-        self.selectedPresetID = selectedPresetID
-        self.unselectedSettings = unselectedSettings
         self.repository = repository
+        selections[.photo] = selectedPresetID
+        manualProfiles[.photo] = unselectedSettings
     }
 
     func load() async {
@@ -51,36 +65,50 @@ final class CameraPresetStore: CameraPresetsLoading {
 
     func delete(id: CameraPreset.ID) {
         presets.removeAll { $0.id == id }
-        if selectedPresetID == id {
-            selectedPresetID = nil
+        for mode in [CaptureMode.photo, .video] where selections[mode] == id {
+            selections[mode] = nil
+            selectionSnapshots[mode] = nil
         }
         persistPresets()
     }
 
-    func select(id: CameraPreset.ID) {
-        guard presets.contains(where: { $0.id == id }) else { return }
-        selectedPresetID = id
+    func select(id: CameraPreset.ID, currentSettings: CameraSettings? = nil) {
+        guard let preset = modePresets.first(where: { $0.id == id }) else { return }
+        selections[captureMode] = id
+        if let currentSettings {
+            selectionSnapshots[captureMode] = preset.settings.applying(to: currentSettings)
+        }
     }
 
     func clearSelection() {
-        selectedPresetID = nil
+        selections[captureMode] = nil
+        selectionSnapshots[captureMode] = nil
     }
 
     func updateUnselectedSettings(_ settings: CameraSettings) {
-        guard selectedPresetID == nil else { return }
-        unselectedSettings = settings
+        let mode = settings.captureMode
+        if selections[mode] != nil {
+            if let snapshot = selectionSnapshots[mode], snapshot != settings {
+                selections[mode] = nil
+                selectionSnapshots[mode] = nil
+            } else { return }
+        }
+        manualProfiles[mode] = settings
     }
 
     func move(fromOffsets offsets: IndexSet, toOffset destination: Int) {
-        let movingPresets = offsets.sorted().map { presets[$0] }
-
-        for index in offsets.sorted(by: >) {
-            presets.remove(at: index)
+        var filtered = modePresets
+        guard (0...filtered.count).contains(destination),
+              offsets.allSatisfy({ filtered.indices.contains($0) }) else { return }
+        let moving = offsets.sorted().map { filtered[$0] }
+        for index in offsets.sorted(by: >) { filtered.remove(at: index) }
+        let insertionIndex = destination - offsets.filter { $0 < destination }.count
+        filtered.insert(contentsOf: moving, at: insertionIndex)
+        var next = 0
+        for index in presets.indices where presets[index].captureMode == captureMode {
+            presets[index] = filtered[next]
+            next += 1
         }
-
-        let removedBeforeDestination = offsets.filter { $0 < destination }.count
-        let insertionIndex = destination - removedBeforeDestination
-        presets.insert(contentsOf: movingPresets, at: insertionIndex)
         persistPresets()
     }
 

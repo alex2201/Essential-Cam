@@ -16,6 +16,7 @@ struct QuickAccessControlsView: View {
     let showExposureEditor: () -> Void
     let showFocusEditor: () -> Void
     let showWhiteBalanceEditor: () -> Void
+    let showVideoSetting: (QuickSettingControl) -> Void
 
     var body: some View {
         controlsContent
@@ -26,7 +27,7 @@ struct QuickAccessControlsView: View {
 
     private var controlsContent: some View {
         VStack(spacing: 8) {
-            ForEach(Array(store.included.enumerated()), id: \.element) { index, control in
+            ForEach(Array(visibleControls.enumerated()), id: \.element) { index, control in
                 if index > 0 { separator }
                 controlButton(control)
             }
@@ -34,6 +35,13 @@ struct QuickAccessControlsView: View {
         .font(.caption)
         .foregroundStyle(.white)
         .padding(.vertical, 12)
+    }
+
+    private var visibleControls: [QuickSettingControl] {
+        store.included.filter { control in
+            QuickSettingControl.controls(for: controls.captureMode).contains(control)
+                && (control != .videoTorch || controls.videoCapabilities.supportsTorch)
+        }
     }
 
     @ViewBuilder
@@ -104,6 +112,25 @@ struct QuickAccessControlsView: View {
                 .frame(maxWidth: .infinity)
                 .contentShape(Rectangle())
             }
+        case .videoResolution:
+            quickSettingButton(icon: "video", value: controls.settings.video.resolution.displayName,
+                accessibilityLabel: "Choose video resolution", action: { showVideoSetting(control) })
+        case .videoFrameRate:
+            quickSettingButton(icon: "speedometer", value: String(controls.settings.video.frameRate.rawValue),
+                accessibilityLabel: "Choose frame rate", action: { showVideoSetting(control) })
+        case .videoCodec:
+            quickSettingButton(icon: "film", value: controls.settings.video.codec.shortName,
+                accessibilityLabel: "Choose video codec", action: { showVideoSetting(control) })
+        case .videoStabilization:
+            quickSettingButton(icon: "hand.raised", value: controls.settings.video.stabilization.displayName,
+                accessibilityLabel: "Choose stabilization", action: { showVideoSetting(control) })
+        case .videoMicrophone:
+            quickSettingButton(icon: "mic", value: controls.settings.video.microphone.displayName,
+                accessibilityLabel: "Choose microphone", action: { showVideoSetting(control) })
+        case .videoTorch:
+            quickSettingButton(icon: "flashlight.on.fill", value: controls.settings.video.torch ? "On" : "Off",
+                accessibilityLabel: "Choose continuous light", action: { showVideoSetting(control) })
+
         }
     }
 

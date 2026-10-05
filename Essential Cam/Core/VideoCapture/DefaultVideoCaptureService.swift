@@ -14,16 +14,23 @@ final class DefaultVideoCaptureService: VideoCaptureService {
     private let videoOutput = AVCaptureMovieFileOutput()
     private var activeDelegate: VideoRecordingDelegate?
 
+    var availableCodecs: [VideoCodec] {
+        VideoCodec.allCases.filter { videoOutput.availableVideoCodecTypes.contains($0.avFoundationValue) }
+    }
+
+    func configure(_ settings: VideoSettings) throws {
+        guard let connection = videoOutput.connection(with: .video),
+              availableCodecs.contains(settings.codec) else {
+            throw VideoCaptureError.unsupportedConfiguration
+        }
+        videoOutput.setOutputSettings([AVVideoCodecKey: settings.codec.avFoundationValue], for: connection)
+        connection.preferredVideoStabilizationMode = settings.stabilization.avFoundationValue
+    }
+
     func record(to url: URL, didStart: @escaping @Sendable () -> Void) async throws {
         guard !videoOutput.isRecording, activeDelegate == nil,
               let connection = videoOutput.connection(with: .video), connection.isActive else {
             throw VideoCaptureError.recordingFailed
-        }
-        if videoOutput.availableVideoCodecTypes.contains(.h264) {
-            videoOutput.setOutputSettings([AVVideoCodecKey: AVVideoCodecType.h264], for: connection)
-        }
-        if connection.isVideoStabilizationSupported {
-            connection.preferredVideoStabilizationMode = .standard
         }
         videoOutput.minFreeDiskSpaceLimit = 100 * 1_024 * 1_024
         defer { activeDelegate = nil }
@@ -66,5 +73,20 @@ enum VideoRecordingResult {
     static func isSuccessful(error: Error?) -> Bool {
         guard let error else { return true }
         return (error as NSError).userInfo[AVErrorRecordingSuccessfullyFinishedKey] as? Bool == true
+    }
+}
+
+extension VideoCodec {
+    var avFoundationValue: AVVideoCodecType { self == .h264 ? .h264 : .hevc }
+}
+
+extension VideoStabilization {
+    var avFoundationValue: AVCaptureVideoStabilizationMode {
+        switch self {
+        case .off: .off
+        case .standard: .standard
+        case .cinematic: .cinematic
+        case .cinematicExtended: .cinematicExtended
+        }
     }
 }

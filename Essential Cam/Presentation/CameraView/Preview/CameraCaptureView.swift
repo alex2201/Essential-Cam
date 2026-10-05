@@ -65,11 +65,9 @@ struct CameraCaptureView: View {
                 }
             }
             .overlay(alignment: .topLeading) {
-                if viewModel.selectedCaptureMode == .photo {
-                    CameraSettingsButton(action: showSettings)
-                        .disabled(viewModel.isCameraInteractionDisabled)
-                        .padding(8)
-                }
+                CameraSettingsButton(action: showSettings)
+                    .disabled(viewModel.isCameraInteractionDisabled)
+                    .padding(8)
             }
             .overlay(alignment: .top) {
                 if let startedAt = viewModel.recordingStartedAt {
@@ -95,9 +93,21 @@ struct CameraCaptureView: View {
                 )
                 .padding(.top, 8)
                 .disabled(viewModel.isCameraInteractionDisabled)
-                .allowsHitTesting(viewModel.selectedCaptureMode == .photo && !viewModel.isCameraInteractionDisabled)
-                .opacity(viewModel.selectedCaptureMode == .video ? 0 : 1)
-                .accessibilityHidden(viewModel.selectedCaptureMode == .video)
+                .id(viewModel.selectedCaptureMode)
+                .allowsHitTesting(!viewModel.isCameraInteractionDisabled)
+                .opacity(viewModel.isVideoCaptureInProgress ? 0 : 1)
+                .accessibilityHidden(viewModel.isVideoCaptureInProgress)
+            }
+            .overlay(alignment: .center) {
+                if let notice = viewModel.controls.configurationNotice {
+                    VStack(spacing: 8) {
+                        Text(notice).font(.footnote).multilineTextAlignment(.center)
+                        Button("OK") { viewModel.controls.clearConfigurationNotice() }
+                    }
+                    .padding()
+                    .background(.regularMaterial, in: .rect(cornerRadius: 12))
+                    .padding(40)
+                }
             }
             .overlay(alignment: .bottom) {
                 Group {
@@ -138,7 +148,14 @@ struct CameraCaptureView: View {
             .overlay(alignment: .bottomTrailing) {
                 CaptureModeButton(selectedMode: Binding(
                     get: { viewModel.selectedCaptureMode },
-                    set: { viewModel.selectCaptureMode($0) }
+                    set: { mode in
+                        Task {
+                            await viewModel.selectCaptureMode(mode)
+#if !targetEnvironment(simulator)
+                            await viewModel.checkVideoPermissions()
+#endif
+                        }
+                    }
                 ))
                     .disabled(viewModel.isCheckingVideoPermissions || viewModel.isCameraInteractionDisabled)
                     .padding(.trailing, 16)

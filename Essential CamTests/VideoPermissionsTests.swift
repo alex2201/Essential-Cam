@@ -1,8 +1,38 @@
+//
+//  VideoPermissionsTests.swift
+//  Essential CamTests
+//
+//  Created by Alexander López.
+//
+
 import Foundation
 import Testing
 @testable import Essential_Cam
 
 struct VideoPermissionsTests {
+    @Test @MainActor func settingsEditingDoesNotRequestVideoPermissionsAndRestoresEntryMode() async {
+        let permissions = TestVideoPermissions(statuses: [.notDetermined, .notDetermined, .notDetermined])
+        let model = CameraViewModel(videoPermissions: permissions)
+        await model.controls.synchronizeWithCamera()
+        model.controls.setPhotoTimer(.tenSeconds)
+        model.beginSettingsEditing()
+        await model.selectCaptureMode(.video)
+        await model.checkVideoPermissions()
+        #expect(await permissions.requests.isEmpty)
+        #expect(await permissions.checks.isEmpty)
+        #expect(model.selectedCaptureMode == .video)
+        await model.endSettingsEditing()
+        #expect(model.selectedCaptureMode == .photo)
+        #expect(model.controls.settings.photoTimer == .tenSeconds)
+        #expect(!model.isEditingSettings)
+        await model.selectCaptureMode(.video)
+        model.beginSettingsEditing()
+        await model.selectCaptureMode(.photo)
+        await model.endSettingsEditing()
+        #expect(model.selectedCaptureMode == .video)
+        #expect(!model.isEditingSettings)
+    }
+
     @Test @MainActor func onboardingWelcomeDoesNotCheckOrRequestPermissions() async {
         let permissions = TestVideoPermissions(statuses: [.notDetermined, .notDetermined, .notDetermined])
         let model = OnboardingViewModel(permissions: permissions)
@@ -171,16 +201,16 @@ struct VideoPermissionsTests {
     @Test @MainActor func deniedMicrophoneAllowsReturnToPhotoAndRecheckAfterSettings() async {
         let permissions = TestVideoPermissions(statuses: [.authorized, .denied, .authorized])
         let model = CameraViewModel(videoPermissions: permissions)
-        model.selectCaptureMode(.video)
+        await model.selectCaptureMode(.video)
         await model.checkVideoPermissions()
         #expect(model.activeAlert == .videoPermissionRequired(.microphone))
         #expect(!model.videoPermissionsGranted)
         #expect(!model.isCheckingVideoPermissions)
-        model.selectCaptureMode(.photo)
+        await model.selectCaptureMode(.photo)
         #expect(model.selectedCaptureMode == .photo)
         #expect(model.activeAlert == nil)
         await permissions.setStatus(.authorized, for: .microphone)
-        model.selectCaptureMode(.video)
+        await model.selectCaptureMode(.video)
         await model.checkVideoPermissions()
         #expect(model.videoPermissionsGranted)
         await permissions.setStatus(.denied, for: .microphone)
@@ -192,7 +222,7 @@ struct VideoPermissionsTests {
     @Test @MainActor func concurrentRecheckDoesNotDuplicatePermissionRequest() async {
         let permissions = TestVideoPermissions(statuses: [.authorized, .notDetermined, .authorized], holdRequest: true)
         let model = CameraViewModel(videoPermissions: permissions)
-        model.selectCaptureMode(.video)
+        await model.selectCaptureMode(.video)
         let task = Task { await model.checkVideoPermissions() }
         await permissions.waitForRequest()
         await model.checkVideoPermissions()

@@ -45,15 +45,18 @@ actor CameraSession {
     private let deviceLookup: any CameraDeviceLookup
     private let photoCaptureService: any PhotoCaptureService
     private let videoCaptureService: any VideoCaptureService
+    private let photoWideColorConfiguration: Bool
     private nonisolated let eventMonitor: CameraSessionEventMonitor
     
     private var activeVideoInput: AVCaptureDeviceInput?
     private var isSetUp = false
+    private var configuredSettings = CameraSettings.standard
     private var isCapturingPhoto = false
     private var isRecordingVideo = false
     private var isStoppingVideo = false
     private var recordingID: UUID?
     private var activeAudioInput: AVCaptureDeviceInput?
+    private var manuallyActivatedAudio = false
     private var rotationCoordinator: AVCaptureDevice.RotationCoordinator?
     private var selectedCameraPosition = Camera.Position.back
 
@@ -74,6 +77,7 @@ actor CameraSession {
         self.deviceLookup = deviceLookup
         self.photoCaptureService = photoCaptureService
         self.videoCaptureService = videoCaptureService
+        photoWideColorConfiguration = captureSession.automaticallyConfiguresCaptureDeviceForWideColor
     }
 
     func start() async throws(CameraSessionError) {
@@ -147,7 +151,12 @@ actor CameraSession {
         return CameraExposureCapabilities(
             exposureBiasRange: device.minExposureTargetBias...device.maxExposureTargetBias,
             isoRange: device.activeFormat.minISO...device.activeFormat.maxISO,
-            durationRange: device.activeFormat.minExposureDuration.seconds...device.activeFormat.maxExposureDuration.seconds,
+            durationRange: device.activeFormat.minExposureDuration.seconds...max(
+                device.activeFormat.minExposureDuration.seconds,
+                configuredSettings.captureMode == .video
+                    ? min(device.activeFormat.maxExposureDuration.seconds, 1 / Double(configuredSettings.video.frameRate.rawValue))
+                    : device.activeFormat.maxExposureDuration.seconds
+            ),
             currentISO: device.iso,
             currentDurationInSeconds: device.exposureDuration.seconds
         )
@@ -195,7 +204,166 @@ actor CameraSession {
         )
     }
 
+    func configuredProfileSettings() -> CameraSettings { configuredSettings }
+
+    func applyMicrophoneFallback(from previous: VideoMicrophoneSelection,
+                                 to fallback: VideoMicrophoneSelection) throws -> VideoMicrophoneSelection? {
+        guard configuredSettings.captureMode == .video,
+              configuredSettings.video.microphone == previous else { return nil }
+        var effective = fallback.isUnavailable(in: videoMicrophones()) ? .automatic : fallback
+        if isRecordingVideo {
+            do {
+                effective = try VideoMicrophoneRouter.changeInputWhileRecording(
+                    effective, cameraPosition: activeVideoInput?.device.position ?? .unspecified,
+                    captureSession: captureSession
+                )
+            } catch {
+                // A second input can disappear between discovery and route selection.
+                effective = try VideoMicrophoneRouter.changeInputWhileRecording(
+                    .automatic, cameraPosition: .unspecified, captureSession: captureSession
+                )
+            }
+        }
+        configuredSettings.video.microphone = effective
+        return effective
+    }
+
+    func videoMicrophones() -> [VideoMicrophone] {
+        VideoMicrophoneRouter.availableMicrophones()
+    }
+
+    func videoCapabilities() -> VideoCapabilities {
+        guard let device = activeVideoInput?.device else { return VideoCapabilities() }
+        let configurations = VideoResolution.allCases.flatMap { resolution in
+            VideoFrameRate.allCases.compactMap { fps -> VideoConfiguration? in
+                guard videoFormat(device: device, resolution: resolution, frameRate: fps) != nil else { return nil }
+                return VideoConfiguration(resolution: resolution, frameRate: fps)
+            }
+        }
+        return VideoCapabilities(
+            configurations: configurations,
+            codecs: videoCaptureService.availableCodecs,
+            stabilizations: VideoStabilization.allCases.filter {
+                $0 == .off || (videoCaptureService.output.connection(with: .video)?.isVideoStabilizationSupported == true
+                    && device.activeFormat.isVideoStabilizationModeSupported($0.avFoundationValue))
+            },
+            // Availability can transiently become false during a session transaction.
+            // Advertise capability; setTorchModeOn reports runtime/thermal failures.
+            supportsTorch: device.hasTorch && device.isTorchModeSupported(.on),
+            microphones: videoMicrophones()
+        )
+    }
+
+    private func videoFormat(
+        device: AVCaptureDevice, resolution: VideoResolution, frameRate: VideoFrameRate
+    ) -> AVCaptureDevice.Format? {
+        device.formats.first { format in
+            let dimensions = CMVideoFormatDescriptionGetDimensions(format.formatDescription)
+            return dimensions.width == resolution.width && dimensions.height == resolution.height
+                && format.videoSupportedFrameRateRanges.contains {
+                    $0.minFrameRate <= Double(frameRate.rawValue) && $0.maxFrameRate >= Double(frameRate.rawValue)
+                } && format.supportedColorSpaces.contains(.sRGB)
+        }
+    }
+
+    /// A synchronous transaction on the camera executor. Roll back before reporting failure.
+    func prepare(_ requested: CameraSettings) throws(CameraSessionError) -> CameraSettings {
+        guard !Task.isCancelled, !isCapturingPhoto, !isRecordingVideo else { throw .operationInProgress }
+        guard isSetUp, let device = activeVideoInput?.device else { throw .setupFailed }
+        let previous = configuredSettings
+        let previousFormat = device.activeFormat
+        captureSession.beginConfiguration()
+        defer { captureSession.commitConfiguration() }
+        do {
+            try device.lockForConfiguration()
+        } catch { throw .configurationFailed }
+        defer { device.unlockForConfiguration() }
+        do {
+            let result = try configure(requested, device: device)
+            configuredSettings = result
+            apply(result.exposure, to: device)
+            apply(result.focus, to: device)
+            apply(result.whiteBalance, to: device)
+            apply(result.avFoundationZoomFactor, to: device)
+            return result
+        } catch {
+            device.activeFormat = previousFormat
+            _ = try? configure(previous, device: device)
+            configuredSettings = previous
+            apply(previous.exposure, to: device)
+            apply(previous.focus, to: device)
+            apply(previous.whiteBalance, to: device)
+            apply(previous.avFoundationZoomFactor, to: device)
+            throw .configurationFailed
+        }
+    }
+
+    private func configure(_ requested: CameraSettings, device: AVCaptureDevice) throws -> CameraSettings {
+        var result = requested
+        if requested.captureMode == .photo {
+            captureSession.automaticallyConfiguresCaptureDeviceForWideColor = photoWideColorConfiguration
+            if device.hasTorch { device.torchMode = .off }
+            if captureSession.outputs.contains(videoCaptureService.output) {
+                captureSession.removeOutput(videoCaptureService.output)
+            }
+            guard captureSession.canSetSessionPreset(.photo) else { throw CameraSessionError.configurationFailed }
+            captureSession.sessionPreset = .photo
+            if !captureSession.outputs.contains(photoCaptureService.output) {
+                try addOutput(photoCaptureService.output)
+            }
+            photoCaptureService.updateConfiguration(for: device)
+            let formats = photoCaptureService.availablePhotoOutputFormats()
+            if !formats.contains(result.photoOutputFormat), let fallback = formats.first {
+                result.photoOutputFormat = fallback
+            }
+            let resolutions = photoCaptureService.availablePhotoResolutions()
+            if let requestedResolution = result.photoResolution, !resolutions.contains(requestedResolution) {
+                result.photoResolution = resolutions.last
+            }
+            if !photoCaptureService.supportsFlashMode(result.flashMode) { result.flashMode = .off }
+            return result
+        }
+        guard captureSession.canSetSessionPreset(.inputPriority) else { throw CameraSessionError.configurationFailed }
+        captureSession.automaticallyConfiguresCaptureDeviceForWideColor = false
+        captureSession.sessionPreset = .inputPriority
+        if captureSession.outputs.contains(photoCaptureService.output) {
+            captureSession.removeOutput(photoCaptureService.output)
+        }
+        // Resolve dimension/fps before attaching the movie output to the new format.
+        var capabilities = videoCapabilities()
+        capabilities.codecs = VideoCodec.allCases
+        guard let candidate = capabilities.resolved(requested.video),
+              let format = videoFormat(device: device, resolution: candidate.resolution, frameRate: candidate.frameRate) else {
+            throw VideoCaptureError.unsupportedConfiguration
+        }
+        if device.activeFormat !== format { device.activeFormat = format }
+        if !captureSession.outputs.contains(videoCaptureService.output) {
+            try addOutput(videoCaptureService.output)
+        }
+        let duration = CMTime(value: 1, timescale: candidate.frameRate.rawValue)
+        device.activeVideoMinFrameDuration = duration
+        device.activeVideoMaxFrameDuration = duration
+        device.automaticallyAdjustsVideoHDREnabled = false
+        if format.isVideoHDRSupported { device.isVideoHDREnabled = false }
+        device.activeColorSpace = .sRGB
+        capabilities = videoCapabilities()
+        var selected = requested.video
+        selected.resolution = candidate.resolution
+        selected.frameRate = candidate.frameRate
+        guard let resolved = capabilities.resolved(selected) else { throw VideoCaptureError.unsupportedConfiguration }
+        result.video = resolved
+        try videoCaptureService.configure(resolved)
+        if device.hasTorch {
+            if resolved.torch && device.isTorchModeSupported(.on) {
+                try device.setTorchModeOn(level: AVCaptureDevice.maxAvailableTorchLevel)
+            } else { device.torchMode = .off }
+        }
+        return result
+    }
+
     func apply(_ settings: CameraSettings) throws(CameraSessionError) {
+        guard !Task.isCancelled, settings.captureMode == configuredSettings.captureMode,
+              settings.captureMode != .video || settings.video == configuredSettings.video else { return }
         guard !isCapturingPhoto, !isRecordingVideo else { throw .operationInProgress }
         guard isSetUp, let device = activeVideoInput?.device else {
             throw .setupFailed
@@ -214,9 +382,12 @@ actor CameraSession {
         apply(settings.focus, to: device)
         apply(settings.whiteBalance, to: device)
         apply(settings.avFoundationZoomFactor, to: device)
+        configuredSettings = settings
     }
 
     func applyZoom(_ settings: CameraSettings) throws(CameraSessionError) {
+        guard !Task.isCancelled, settings.captureMode == configuredSettings.captureMode,
+              settings.captureMode != .video || settings.video == configuredSettings.video else { return }
         guard !isCapturingPhoto, !isRecordingVideo else { throw .operationInProgress }
         guard isSetUp, let device = activeVideoInput?.device else {
             throw .setupFailed
@@ -255,6 +426,8 @@ actor CameraSession {
     func applyAfterCameraSwitch(
         _ settings: CameraSettings
     ) throws(CameraSessionError) {
+        guard !Task.isCancelled, settings.captureMode == configuredSettings.captureMode,
+              settings.captureMode != .video || settings.video == configuredSettings.video else { return }
         guard !isCapturingPhoto, !isRecordingVideo else { throw .operationInProgress }
         guard isSetUp, let device = activeVideoInput?.device else {
             throw .setupFailed
@@ -380,8 +553,8 @@ actor CameraSession {
         activeVideoInput = newInput
         rotationCoordinator = AVCaptureDevice.RotationCoordinator(device: device, previewLayer: nil)
 
-        for capture in captureComponents {
-            capture.updateConfiguration(for: device)
+        if configuredSettings.captureMode == .photo {
+            for capture in captureComponents { capture.updateConfiguration(for: device) }
         }
     }
 
@@ -436,7 +609,9 @@ actor CameraSession {
                     duration.seconds,
                     device.activeFormat.minExposureDuration.seconds
                 ),
-                device.activeFormat.maxExposureDuration.seconds
+                configuredSettings.captureMode == .video
+                    ? min(device.activeFormat.maxExposureDuration.seconds, 1 / Double(configuredSettings.video.frameRate.rawValue))
+                    : device.activeFormat.maxExposureDuration.seconds
             )
             let supportedDuration = CMTime(
                 seconds: supportedDurationInSeconds,
@@ -650,7 +825,7 @@ extension CameraSession: VideoRecording {
         guard !isCapturingPhoto, !isRecordingVideo else { throw VideoCaptureError.operationInProgress }
         guard isSetUp, captureSession.isRunning,
               AVCaptureDevice.authorizationStatus(for: .audio) == .authorized,
-              let device = activeVideoInput?.device else {
+              activeVideoInput != nil else {
             throw VideoCaptureError.recordingFailed
         }
         isRecordingVideo = true
@@ -658,12 +833,18 @@ extension CameraSession: VideoRecording {
         let id = UUID()
         recordingID = id
         defer {
-            restorePhotoConfiguration()
+            removeAudioInput()
+            if manuallyActivatedAudio {
+                VideoMicrophoneRouter.release(captureSession: captureSession)
+                manuallyActivatedAudio = false
+            }
             isRecordingVideo = false
             recordingID = nil
             isStoppingVideo = false
         }
-        try configureVideo(device: device)
+        guard configuredSettings.captureMode == .video else { throw VideoCaptureError.unsupportedConfiguration }
+        try configureAudio()
+        try videoCaptureService.configure(configuredSettings.video)
         if let connection = videoCaptureService.output.connection(with: .video) {
             let angle = rotationCoordinator?.videoRotationAngleForHorizonLevelCapture ?? 90
             if connection.isVideoRotationAngleSupported(angle) {
@@ -692,49 +873,26 @@ extension CameraSession: VideoRecording {
         if isStoppingVideo { videoCaptureService.stopRecording() }
     }
 
-    private func configureVideo(device: AVCaptureDevice) throws {
+    private func configureAudio() throws {
+        manuallyActivatedAudio = try VideoMicrophoneRouter.configure(
+            configuredSettings.video.microphone, cameraPosition: activeVideoInput?.device.position ?? .unspecified,
+            captureSession: captureSession
+        )
         guard let microphone = AVCaptureDevice.default(for: .audio) else {
             throw VideoCaptureError.recordingFailed
         }
         captureSession.beginConfiguration()
         defer { captureSession.commitConfiguration() }
-        guard captureSession.canSetSessionPreset(.hd1920x1080) else {
-            throw VideoCaptureError.unsupportedConfiguration
-        }
-        captureSession.sessionPreset = .hd1920x1080
-        activeAudioInput = try addInput(for: microphone)
-        try addOutput(videoCaptureService.output)
-        try device.lockForConfiguration()
-        defer { device.unlockForConfiguration() }
-        guard device.activeFormat.videoSupportedFrameRateRanges.contains(where: {
-            $0.minFrameRate <= 30 && $0.maxFrameRate >= 30
-        }) else { throw VideoCaptureError.unsupportedConfiguration }
-        let frameDuration = CMTime(value: 1, timescale: 30)
-        device.activeVideoMinFrameDuration = frameDuration
-        device.activeVideoMaxFrameDuration = frameDuration
-        device.automaticallyAdjustsVideoHDREnabled = false
-        if device.activeFormat.isVideoHDRSupported { device.isVideoHDREnabled = false }
-        if device.activeFormat.supportedColorSpaces.contains(.sRGB) { device.activeColorSpace = .sRGB }
-        // Fixed automatic settings for the basic video release. Photo settings
-        // are reapplied by the controller once this recording has finished.
-        if device.isExposureModeSupported(.continuousAutoExposure) { device.exposureMode = .continuousAutoExposure }
-        if device.isFocusModeSupported(.continuousAutoFocus) { device.focusMode = .continuousAutoFocus }
-        if device.isWhiteBalanceModeSupported(.continuousAutoWhiteBalance) { device.whiteBalanceMode = .continuousAutoWhiteBalance }
+        if activeAudioInput == nil { activeAudioInput = try addInput(for: microphone) }
     }
 
-    private func restorePhotoConfiguration() {
+    private func removeAudioInput() {
         captureSession.beginConfiguration()
         defer { captureSession.commitConfiguration() }
-        if captureSession.outputs.contains(videoCaptureService.output) {
-            captureSession.removeOutput(videoCaptureService.output)
-        }
         if let activeAudioInput {
             captureSession.removeInput(activeAudioInput)
             self.activeAudioInput = nil
         }
-        if captureSession.canSetSessionPreset(.photo) { captureSession.sessionPreset = .photo }
-        if let device = activeVideoInput?.device {
-            photoCaptureService.updateConfiguration(for: device)
-        }
     }
+
 }

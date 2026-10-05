@@ -1,16 +1,23 @@
+//
+//  QuickSettingsCustomizationView.swift
+//  Essential Cam
+//
+//  Created by Alexander López.
+//
+
 import SwiftUI
 
 struct QuickSettingsCustomizationView: View {
     @Environment(QuickSettingsStore.self) private var store
 
-    private let repository: any QuickSettingsRepository
+    private let repository: (any QuickSettingsRepository)?
 
-    init(repository: any QuickSettingsRepository = UserDefaultsQuickSettingsRepository()) {
+    init(repository: (any QuickSettingsRepository)? = nil) {
         self.repository = repository
     }
 
     private var customization: CustomizeQuickSettingsUseCase {
-        CustomizeQuickSettingsUseCase(store: store, repository: repository)
+        CustomizeQuickSettingsUseCase(store: store, repository: repository ?? UserDefaultsQuickSettingsRepository(mode: store.captureMode))
     }
 
     var body: some View {
@@ -75,7 +82,7 @@ struct QuickSettingsCustomizationView: View {
                 Button("Reset") { customization.execute(.reset) }
             }
         }
-        .navigationTitle("Quick Settings")
+        .navigationTitle("\(store.captureMode.accessibilityName) Quick Settings")
         .navigationBarTitleDisplayMode(.inline)
     }
 }

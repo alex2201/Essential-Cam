@@ -19,6 +19,7 @@ struct CameraSettings: Codable, Equatable, Sendable {
     var photoResolution: PhotoResolution?
     var photoTimer: PhotoTimer = .off
     var contentAwareCorrection: ContentAwareCorrection = .off
+    var video: VideoSettings = .standard
 
     private enum CodingKeys: String, CodingKey {
         case exposure
@@ -32,6 +33,7 @@ struct CameraSettings: Codable, Equatable, Sendable {
         case photoResolution
         case photoTimer
         case contentAwareCorrection
+        case video
     }
 
     init(
@@ -45,7 +47,8 @@ struct CameraSettings: Codable, Equatable, Sendable {
         photoOutputFormat: PhotoOutputFormat = .heif,
         photoResolution: PhotoResolution? = nil,
         photoTimer: PhotoTimer = .off,
-        contentAwareCorrection: ContentAwareCorrection = .off
+        contentAwareCorrection: ContentAwareCorrection = .off,
+        video: VideoSettings = .standard
     ) {
         self.exposure = exposure
         self.focus = focus
@@ -58,6 +61,7 @@ struct CameraSettings: Codable, Equatable, Sendable {
         self.photoResolution = photoResolution
         self.photoTimer = photoTimer
         self.contentAwareCorrection = contentAwareCorrection
+        self.video = video
     }
 
     init(from decoder: any Decoder) throws {
@@ -82,10 +86,18 @@ struct CameraSettings: Codable, Equatable, Sendable {
             ContentAwareCorrection.self,
             forKey: .contentAwareCorrection
         ) ?? .off
+        video = try container.decodeIfPresent(VideoSettings.self, forKey: .video) ?? .standard
     }
 }
 
 extension CameraSettings {
+    static func standard(for mode: CaptureMode) -> CameraSettings {
+        var settings = standard
+        settings.captureMode = mode
+        if mode == .video { settings.aspectRatio = .sixteenByNine }
+        return settings
+    }
+
     static let standard = CameraSettings(
         exposure: .automatic(exposureBias: 0),
         focus: .continuousAuto,

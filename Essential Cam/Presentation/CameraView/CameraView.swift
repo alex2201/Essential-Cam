@@ -5,6 +5,7 @@
 //  Created by Alexander López on 01/09/26.
 //
 
+import AVFAudio
 import SwiftUI
 import UIKit
 
@@ -12,6 +13,7 @@ struct CameraView: View {
     @Environment(\.scenePhase) private var scenePhase
     @Environment(\.openURL) private var openURL
     @Environment(CameraPresetStore.self) private var presetStore
+    @Environment(QuickSettingsStore.self) private var quickSettingsStore
     @State private var viewModel = CameraViewModel()
     @State private var isSettingsPresented = false
     @State private var isGalleryPresented = false
@@ -78,6 +80,9 @@ struct CameraView: View {
         .task {
 #if !targetEnvironment(simulator)
             await viewModel.start()
+#else
+            viewModel.cameraStatus = .running
+            await viewModel.controls.synchronizeWithCamera()
 #endif
             await viewModel.refreshRecentPhotoThumbnails()
         }
@@ -87,12 +92,33 @@ struct CameraView: View {
                     isActive: newPhase == .active,
                     isBackground: newPhase == .background
                 )
+                if newPhase == .active, !isGalleryPresented {
+                    await viewModel.controls.refreshVideoMicrophones()
+                }
             }
         }
+        .onChange(of: isGalleryPresented) { _, presented in
+            if !presented { Task { await viewModel.controls.refreshVideoMicrophones() } }
+        }
         .task(id: viewModel.selectedCaptureMode) {
+#if !targetEnvironment(simulator)
             await viewModel.checkVideoPermissions()
+#endif
+        }
+        .onReceive(NotificationCenter.default.publisher(for: AVAudioSession.routeChangeNotification)) { notification in
+            let rawReason = (notification.userInfo?[AVAudioSessionRouteChangeReasonKey] as? NSNumber)?.uintValue
+            guard !isGalleryPresented,
+                  let rawReason, let reason = AVAudioSession.RouteChangeReason(rawValue: rawReason),
+                  reason == .newDeviceAvailable || reason == .oldDeviceUnavailable
+                    || (reason == .routeConfigurationChange && viewModel.isRecordingVideo) else { return }
+            Task {
+                do { try await Task.sleep(for: .milliseconds(100)) } catch { return }
+                await viewModel.controls.refreshVideoMicrophones()
+            }
         }
         .onChange(of: viewModel.controls.settings, initial: true) { _, settings in
+            quickSettingsStore.captureMode = settings.captureMode
+            presetStore.activate(settings.captureMode)
             presetStore.updateUnselectedSettings(settings)
         }
         .alert(item: $viewModel.activeAlert, content: alert(for:))

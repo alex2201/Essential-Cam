@@ -1,3 +1,10 @@
+//
+//  CustomizeQuickSettingsUseCase.swift
+//  Essential Cam
+//
+//  Created by Alexander López.
+//
+
 import Foundation
 
 @MainActor
@@ -19,14 +26,14 @@ struct CustomizeQuickSettingsUseCase {
     }
 
     var available: [QuickSettingControl] {
-        QuickSettingControl.allCases.filter { !store.included.contains($0) }
+        QuickSettingControl.controls(for: store.captureMode).filter { !store.included.contains($0) }
     }
 
     func execute(_ action: Action) {
         var result = store.included
         switch action {
         case let .add(control):
-            guard !result.contains(control) else { return }
+            guard QuickSettingControl.controls(for: store.captureMode).contains(control), !result.contains(control) else { return }
             result.append(control)
         case let .remove(control):
             result.removeAll { $0 == control }

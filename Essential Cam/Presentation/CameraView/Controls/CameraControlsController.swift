@@ -20,11 +20,118 @@ final class CameraControlsController {
 
     private(set) var settings: CameraSettings {
         didSet {
+            if settings.captureMode == .video, oldValue.captureMode == .video {
+                microphoneHistory.rememberChange(from: oldValue.video.microphone, to: settings.video.microphone)
+            }
+            profiles[settings.captureMode] = settings
             guard settings != oldValue else { return }
             guard !isDeviceApplicationSuppressed else { return }
             applySettings()
         }
     }
+
+    private var profiles = CaptureSettingsProfiles()
+    private var microphoneHistory = VideoMicrophoneFallbackHistory()
+    private var microphoneRefreshRevision = 0
+    private(set) var isApplyingConfiguration = false
+    private(set) var configurationNotice: String?
+    private(set) var videoCapabilities = VideoCapabilities()
+
+    var captureMode: CaptureMode { settings.captureMode }
+    var availableVideoResolutions: [VideoResolution] {
+        VideoResolution.allCases.filter { resolution in
+            videoCapabilities.configurations.contains { $0.resolution == resolution }
+        }
+    }
+    var availableVideoFrameRates: [VideoFrameRate] {
+        VideoFrameRate.allCases.filter { fps in
+            videoCapabilities.configurations.contains { $0.resolution == settings.video.resolution && $0.frameRate == fps }
+        }
+    }
+
+    func switchCaptureMode(_ mode: CaptureMode) async {
+        guard !isApplyingConfiguration, mode != captureMode else { return }
+        cancelPendingChanges()
+        isDeviceApplicationSuppressed = true
+        settings = profiles[mode]
+        cachePresetControlValues(from: settings)
+        isDeviceApplicationSuppressed = false
+        await synchronizeWithCamera(preferredZoomFactor: settings.zoomFactor)
+    }
+
+    func setVideoSettings(_ value: VideoSettings) {
+        guard captureMode == .video, !isApplyingConfiguration else { return }
+        isDeviceApplicationSuppressed = true
+        settings.video = value
+        isDeviceApplicationSuppressed = false
+        Task { await synchronizeWithCamera(preferredZoomFactor: settings.zoomFactor) }
+    }
+
+    /// A structured task owned by the visible settings surface. Route notifications
+    /// remain the fast path; polling also catches connections while audio is inactive.
+    func monitorVideoMicrophones() async {
+        while !Task.isCancelled {
+            await refreshVideoMicrophones()
+            do { try await Task.sleep(for: .seconds(1)) } catch { return }
+        }
+    }
+
+    func refreshVideoMicrophones() async {
+        microphoneRefreshRevision += 1
+        let revision = microphoneRefreshRevision
+        while isApplyingConfiguration {
+            do { try await Task.sleep(for: .milliseconds(10)) } catch { return }
+        }
+        guard !Task.isCancelled else { return }
+#if targetEnvironment(simulator)
+        let inputs = [VideoMicrophone(id: "simulator.builtin", name: "iPhone Microphone", isBuiltIn: true)]
+#else
+        let inputs = await cameraSession.videoMicrophones()
+#endif
+        guard revision == microphoneRefreshRevision, !Task.isCancelled else { return }
+        if isApplyingConfiguration {
+            await refreshVideoMicrophones()
+            return
+        }
+        await reconcileVideoMicrophones(inputs)
+    }
+
+    func reconcileVideoMicrophones(_ inputs: [VideoMicrophone]) async {
+        // Avoid rebuilding an open picker when discovery finds the same inputs.
+        if videoCapabilities.microphones != inputs {
+            videoCapabilities.microphones = inputs
+        }
+        let selected = profiles[.video].video.microphone
+        guard let fallback = microphoneHistory.fallback(for: selected, inputs: inputs) else { return }
+        var effective = fallback
+        var liveRouteFailed = false
+        if captureMode == .video {
+#if !targetEnvironment(simulator)
+            do {
+                guard let applied = try await cameraSession.applyMicrophoneFallback(from: selected, to: fallback) else { return }
+                effective = applied
+            } catch {
+                effective = .automatic
+                liveRouteFailed = true
+                cameraControlsLogger.error("Couldn't restore audio input: \(error.localizedDescription, privacy: .public)")
+            }
+#endif
+            guard !isApplyingConfiguration, captureMode == .video, settings.video.microphone == selected else { return }
+            // Change only the audio choice. Never reconfigure the video format during recording.
+            isDeviceApplicationSuppressed = true
+            settings.video.microphone = effective
+            isDeviceApplicationSuppressed = false
+        } else {
+            guard profiles[.video].video.microphone == selected else { return }
+            microphoneHistory.rememberChange(from: selected, to: effective)
+            profiles[.video].video.microphone = effective
+        }
+        configurationNotice = liveRouteFailed
+            ? "The microphone disconnected. Automatic is selected for the next recording; the current recording couldn't switch audio. Stop recording and try again."
+            : "The selected microphone is unavailable. Video now uses \(effective.displayName). Saved presets are unchanged."
+    }
+
+    func clearConfigurationNotice() { configurationNotice = nil }
 
     // MARK: - Capabilities
 
@@ -55,6 +162,7 @@ final class CameraControlsController {
     // MARK: - Cached Values
 
     private var isDeviceApplicationSuppressed = false
+    private var profileRevision = 0
     private var automaticExposureBias: Float = 0
     private var manualExposureISO: Float = 1
     private var manualExposureDurationInSeconds: Double = 1
@@ -98,6 +206,7 @@ final class CameraControlsController {
     // MARK: - Camera Synchronization
 
     func cancelPendingChanges() {
+        profileRevision += 1
         settingsThrottler.cancel()
         zoomThrottler.cancel()
     }
@@ -106,26 +215,66 @@ final class CameraControlsController {
         afterCameraSwitch: Bool = false,
         preferredZoomFactor: Double? = nil
     ) async {
-        await updateExposureCapabilities()
-        await updateFocusCapabilities()
-        await updateWhiteBalanceCapabilities()
-        await updateZoomCapabilities(preferredZoomFactor: preferredZoomFactor)
-        await updateContentAwareCorrectionCapability()
-
-        if afterCameraSwitch {
-            settingsThrottler.cancel()
-            zoomThrottler.cancel()
-            do {
-                try await cameraSession.applyAfterCameraSwitch(settings)
-            } catch {
-                // TODO: Track this error with the integrated logging service.
-                cameraControlsLogger.error(
-                    "Couldn't apply settings after camera switch: \(error.localizedDescription, privacy: .public)"
-                )
-            }
-        } else {
-            applySettingsImmediately()
+        guard !isApplyingConfiguration else { return }
+        isApplyingConfiguration = true
+        cancelPendingChanges()
+        isDeviceApplicationSuppressed = true
+        defer {
+            isDeviceApplicationSuppressed = false
+            isApplyingConfiguration = false
+#if !targetEnvironment(simulator)
+            if captureMode == .video { Task { await self.refreshVideoMicrophones() } }
+#endif
         }
+#if targetEnvironment(simulator)
+        videoCapabilities = VideoCapabilities(
+            configurations: VideoResolution.allCases.flatMap { resolution in
+                VideoFrameRate.allCases.map { VideoConfiguration(resolution: resolution, frameRate: $0) }
+            }, codecs: VideoCodec.allCases, stabilizations: VideoStabilization.allCases, supportsTorch: false
+        )
+        if captureMode == .video, let resolved = videoCapabilities.resolved(settings.video) {
+            settings.video = resolved
+        }
+        videoCapabilities.microphones = [VideoMicrophone(id: "simulator.builtin", name: "iPhone Microphone", isBuiltIn: true)]
+        manualExposureISO = 100
+        manualExposureDurationInSeconds = 1 / 60
+        cachePresetControlValues(from: settings)
+        exposureBiasRange = -3...3
+        exposureISORange = 25...2000
+        exposureDurationRange = (1.0 / 8000)...(captureMode == .video ? 1 / Double(settings.video.frameRate.rawValue) : 1)
+        supportsAutoFocus = true
+        supportsContinuousAutoFocus = true
+        supportsManualFocus = true
+        supportsAutomaticWhiteBalance = true
+        supportsManualWhiteBalance = true
+        zoomFactorRange = 1...10
+#else
+        do {
+            let requested = settings
+            settings = try await cameraSession.prepare(requested)
+            if settings.video != requested.video, captureMode == .video {
+                configurationNotice = "Some video settings aren't supported by this camera. Compatible values are now selected; saved presets are unchanged."
+            }
+            if captureMode == .photo,
+               settings.photoOutputFormat != requested.photoOutputFormat
+                || settings.photoResolution != requested.photoResolution
+                || settings.flashMode != requested.flashMode {
+                configurationNotice = "Some photo settings aren't supported by this camera. Compatible values are now selected; saved presets are unchanged."
+            }
+            videoCapabilities = await cameraSession.videoCapabilities()
+            await updateExposureCapabilities()
+            await updateFocusCapabilities()
+            await updateWhiteBalanceCapabilities()
+            await updateZoomCapabilities(preferredZoomFactor: preferredZoomFactor ?? settings.zoomFactor)
+            await updateContentAwareCorrectionCapability()
+            cachePresetControlValues(from: settings)
+            try await cameraSession.apply(settings)
+        } catch {
+            settings = await cameraSession.configuredProfileSettings()
+            configurationNotice = "Couldn't apply this camera configuration. The previous settings were restored."
+            cameraControlsLogger.error("Couldn't configure capture profile: \(error.localizedDescription, privacy: .public)")
+        }
+#endif
     }
 
     // MARK: - Capture Configuration
@@ -168,34 +317,21 @@ final class CameraControlsController {
     }
 
     func applyPreset(_ preset: CameraPresetSettings) {
-        let defaults = CameraSettings.standard
-        var updatedSettings = settings
-        updatedSettings.exposure = preset.exposure ?? defaults.exposure
-        updatedSettings.focus = preset.focus ?? defaults.focus
-        updatedSettings.whiteBalance = preset.whiteBalance ?? defaults.whiteBalance
-        updatedSettings.aspectRatio = preset.aspectRatio ?? defaults.aspectRatio
-        updatedSettings.flashMode = preset.flashMode ?? defaults.flashMode
-
+        guard preset.captureMode == captureMode, !isApplyingConfiguration else { return }
         isDeviceApplicationSuppressed = true
-        settings = updatedSettings
-        cachePresetControlValues(from: updatedSettings)
+        settings = preset.applying(to: settings)
+        cachePresetControlValues(from: settings)
         isDeviceApplicationSuppressed = false
-        applySettingsImmediately()
+        Task { await synchronizeWithCamera(preferredZoomFactor: settings.zoomFactor) }
     }
 
     func applyUnselectedSettings(_ unselectedSettings: CameraSettings) {
-        var updatedSettings = settings
-        updatedSettings.exposure = unselectedSettings.exposure
-        updatedSettings.focus = unselectedSettings.focus
-        updatedSettings.whiteBalance = unselectedSettings.whiteBalance
-        updatedSettings.aspectRatio = unselectedSettings.aspectRatio
-        updatedSettings.flashMode = unselectedSettings.flashMode
-
+        guard unselectedSettings.captureMode == captureMode, !isApplyingConfiguration else { return }
         isDeviceApplicationSuppressed = true
-        settings = updatedSettings
-        cachePresetControlValues(from: updatedSettings)
+        settings = unselectedSettings
+        cachePresetControlValues(from: settings)
         isDeviceApplicationSuppressed = false
-        applySettingsImmediately()
+        Task { await synchronizeWithCamera(preferredZoomFactor: settings.zoomFactor) }
     }
 
     // MARK: - Zoom
@@ -278,14 +414,21 @@ final class CameraControlsController {
     func useManualWhiteBalance() {
         guard supportsManualWhiteBalance else { return }
 
+        let mode = captureMode
+        let revision = profileRevision
+        let previousBalance = settings.whiteBalance
         Task {
             if let capabilities = await cameraSession.whiteBalanceCapabilities() {
+                guard mode == captureMode, revision == profileRevision, settings.whiteBalance == previousBalance,
+                      !isApplyingConfiguration else { return }
                 manualWhiteBalanceTemperature = supportedWhiteBalanceTemperature(
                     capabilities.currentTemperature
                 )
                 manualWhiteBalanceTint = supportedWhiteBalanceTint(capabilities.currentTint)
             }
 
+            guard mode == captureMode, revision == profileRevision, settings.whiteBalance == previousBalance,
+                  !isApplyingConfiguration else { return }
             settings.whiteBalance = .manual(
                 temperature: manualWhiteBalanceTemperature,
                 tint: manualWhiteBalanceTint
@@ -392,7 +535,9 @@ final class CameraControlsController {
         supportsAutoFocus = capabilities.supportsAutoFocus
         supportsContinuousAutoFocus = capabilities.supportsContinuousAutoFocus
         supportsManualFocus = capabilities.supportsManualFocus
-        manualFocusLensPosition = capabilities.currentLensPosition
+        if case let .manual(position) = settings.focus {
+            manualFocusLensPosition = position
+        } else { manualFocusLensPosition = capabilities.currentLensPosition }
 
         switch settings.focus {
         case .manual where !supportsManualFocus:

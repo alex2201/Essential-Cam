@@ -56,6 +56,12 @@ struct Essential_CamApp: App {
                     presetStore: presetStore
                 )
                 await loadApplication.execute()
+                quickSettingsStore.captureMode = .video
+                LoadQuickSettingsUseCase(
+                    store: quickSettingsStore,
+                    repository: UserDefaultsQuickSettingsRepository(mode: .video)
+                ).execute()
+                quickSettingsStore.captureMode = .photo
                 guard !Task.isCancelled else { return }
                 let result = await CheckStorageUseCase(storage: DefaultStorageCapacity()).execute()
                 guard !Task.isCancelled else { return }

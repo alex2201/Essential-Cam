@@ -9,24 +9,94 @@ import SwiftUI
 
 struct CameraSettingsView: View {
     @Environment(\.dismiss) private var dismiss
-    @Environment(CameraPresetStore.self) private var presetStore
+    @Environment(\.scenePhase) private var scenePhase
     let viewModel: CameraViewModel
+    @State private var isClosing = false
 
     var body: some View {
         NavigationStack {
             List {
+                Section {
+                    NavigationLink {
+                        CaptureProfileSettingsView(mode: .photo, close: close, viewModel: viewModel)
+                    } label: {
+                        Label("Photo Settings", systemImage: "camera")
+                    }
+                    .accessibilityIdentifier("settings.photo")
+                    NavigationLink {
+                        CaptureProfileSettingsView(mode: .video, close: close, viewModel: viewModel)
+                    } label: {
+                        Label("Video Settings", systemImage: "video")
+                    }
+                    .accessibilityIdentifier("settings.video")
+                } header: {
+                    Text("Capture Settings")
+                } footer: {
+                    Text("Edit either profile. Closing Settings returns to your original capture mode.")
+                }
+
+                Section("Camera") {
+                    NavigationLink("Lens") { LensSettingsView(viewModel: viewModel) }
+                    NavigationLink("Camera") { CameraPositionSettingsView(viewModel: viewModel) }
+                }
+                Section {
+                    NavigationLink("Feedback") { FeedbackView() }
+                }
+            }
+            .navigationTitle("Settings")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Done", action: close)
+                        .disabled(isClosing || viewModel.controls.isApplyingConfiguration)
+                }
+            }
+            .disabled(isClosing || viewModel.controls.isApplyingConfiguration)
+        }
+        .disabled(isClosing)
+        .task(id: scenePhase) {
+            guard scenePhase == .active else { return }
+            await viewModel.controls.monitorVideoMicrophones()
+        }
+        .onAppear { viewModel.beginSettingsEditing() }
+        .onDisappear {
+            Task { await viewModel.endSettingsEditing() }
+        }
+    }
+
+    private func close() {
+        isClosing = true
+        Task {
+            await viewModel.endSettingsEditing()
+            dismiss()
+        }
+    }
+}
+
+private struct CaptureProfileSettingsView: View {
+    let mode: CaptureMode
+    let close: () -> Void
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    @Environment(CameraPresetStore.self) private var presetStore
+    let viewModel: CameraViewModel
+
+    var body: some View {
+        List {
+            Section("Capture Controls") {
+                settingsLink("Exposure", value: viewModel.controls.settings.exposure.settingsDisplayName) {
+                    ExposureSettingsView(controls: viewModel.controls)
+                }
+                settingsLink("Focus", value: viewModel.controls.settings.focus.settingsDisplayName) {
+                    FocusSettingsView(controls: viewModel.controls)
+                }
+                settingsLink("White Balance", value: viewModel.controls.settings.whiteBalance.settingsDisplayName) {
+                    WhiteBalanceSettingsView(controls: viewModel.controls)
+                }
+            }
+            if viewModel.selectedCaptureMode == .photo {
                 Section("Photo") {
                     settingsLink("Aspect Ratio", value: viewModel.controls.settings.aspectRatio.displayName) {
                         AspectRatioSettingsView(controls: viewModel.controls)
-                    }
-                    settingsLink("Exposure", value: viewModel.controls.settings.exposure.settingsDisplayName) {
-                        ExposureSettingsView(controls: viewModel.controls)
-                    }
-                    settingsLink("Focus", value: viewModel.controls.settings.focus.settingsDisplayName) {
-                        FocusSettingsView(controls: viewModel.controls)
-                    }
-                    settingsLink("White Balance", value: viewModel.controls.settings.whiteBalance.settingsDisplayName) {
-                        WhiteBalanceSettingsView(controls: viewModel.controls)
                     }
                     settingsLink("Image Format", value: viewModel.controls.settings.photoOutputFormat.displayName) {
                         PhotoFormatSettingsView(viewModel: viewModel)
@@ -48,49 +118,58 @@ struct CameraSettingsView: View {
                     }
                 }
 
-                Section("Personalization") {
-                    NavigationLink("Quick Settings") {
-                        QuickSettingsCustomizationView()
-                    }
+            } else {
+                Section("Video") {
+                    VideoSettingsEditor(settings: Binding(
+                        get: { viewModel.controls.settings.video },
+                        set: { viewModel.controls.setVideoSettings($0) }
+                    ), capabilities: viewModel.controls.videoCapabilities)
                 }
-
-                Section("Presets") {
-                    settingsLink(
-                        "Camera Presets",
-                        value: presetStore.presets.count.formatted()
-                    ) {
-                        CameraPresetsView(
-                            store: presetStore,
-                            controls: viewModel.controls
-                        )
-                    }
-                }
-
-                Section("Camera") {
-                    settingsLink("Lens", value: viewModel.selectedCamera?.settingsDisplayName ?? "Unavailable") {
-                        LensSettingsView(viewModel: viewModel)
-                    }
-                    settingsLink("Zoom", value: viewModel.controls.settings.zoomFactor.settingsZoomName) {
-                        ZoomSettingsView(controls: viewModel.controls)
-                    }
-                    settingsLink("Camera", value: viewModel.selectedCamera?.position.settingsDisplayName ?? "Unavailable") {
-                        CameraPositionSettingsView(viewModel: viewModel)
-                    }
-                }
-
+            }
+            if let notice = viewModel.controls.configurationNotice {
                 Section {
-                    NavigationLink("Feedback") {
-                        FeedbackView()
-                    }
+                    Text(notice)
+                    Button("Dismiss") { viewModel.controls.clearConfigurationNotice() }
                 }
             }
-            .navigationTitle("Settings")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .confirmationAction) {
-                    Button("Done") { dismiss() }
+
+            Section("Personalization") {
+                NavigationLink("Quick Settings") {
+                    QuickSettingsCustomizationView()
                 }
             }
+
+            Section("Presets") {
+                settingsLink(
+                    "Camera Presets",
+                    value: presetStore.modePresets.count.formatted()
+                ) {
+                    CameraPresetsView(
+                        store: presetStore,
+                        controls: viewModel.controls,
+                        photoResolutions: viewModel.availablePhotoResolutions
+                    )
+                }
+            }
+
+            Section("Camera") {
+                settingsLink("Zoom", value: viewModel.controls.settings.zoomFactor.settingsZoomName) {
+                    ZoomSettingsView(controls: viewModel.controls)
+                }
+            }
+        }
+        .navigationTitle("\(mode.accessibilityName) Settings")
+        .disabled(viewModel.controls.isApplyingConfiguration || viewModel.selectedCaptureMode != mode)
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItem(placement: .confirmationAction) {
+                Button("Done", action: close)
+                    .disabled(viewModel.controls.isApplyingConfiguration)
+            }
+        }
+        .task {
+            await viewModel.selectCaptureMode(mode)
+            if mode == .video { await viewModel.controls.refreshVideoMicrophones() }
         }
     }
 
@@ -107,14 +186,20 @@ struct CameraSettingsView: View {
         @ViewBuilder destination: () -> Destination
     ) -> some View {
         NavigationLink(destination: destination) {
-            HStack {
-                Text(title)
-                Spacer()
-                Text(value)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
+            if dynamicTypeSize.isAccessibilitySize {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(title)
+                    Text(value).font(.subheadline).foregroundStyle(.secondary)
+                }
+            } else {
+                HStack {
+                    Text(title)
+                    Spacer()
+                    Text(value).foregroundStyle(.secondary).lineLimit(1)
+                }
             }
         }
+        .accessibilityIdentifier("settings.\(title)")
     }
 }
 

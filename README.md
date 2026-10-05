@@ -8,7 +8,9 @@ The project focuses on capturing clean, editing-ready photos with Apple's camera
 
 - Live camera preview with a portrait-only interface
 - Photo capture and automatic saving to the Photo Library
-- Basic 1080p/30 fps SDR video recording with microphone audio
+- SDR video recording with microphone audio, supported 1080p/4K resolutions and 24/25/30/50/60 fps
+- H.264/HEVC video codecs, supported stabilization modes, and continuous light when available
+- Independent photo/video settings during a session, with separate locally saved presets and quick-control layouts
 - Video thumbnails with a play overlay and in-app playback
 - Retry or discard recordings when saving to Photos fails
 - Startup storage check with a low-space warning for photos and videos
@@ -26,7 +28,7 @@ The project focuses on capturing clean, editing-ready photos with Apple's camera
 ## Requirements
 
 - Xcode 26 or later
-- iOS 18.6 or later
+- iOS 18.0 or later
 - An iPhone for camera capture and accurate hardware testing
 
 Firebase Analytics, Crashlytics, and Authentication are integrated through Swift
@@ -94,19 +96,45 @@ denied, open Settings from the alert or return to Photo mode. Permissions are
 checked again when the app becomes active in Video mode. Microphone access is
 not required for photos.
 
-Video mode records H.264 QuickTime clips at 1080p/30 fps with automatic exposure,
-focus, and white balance. Choose a camera and zoom before recording; camera,
-mode, and settings changes are blocked until the clip finishes saving. The red
-button starts recording and becomes a stop button with an elapsed-time display.
-Leaving the app or a camera interruption ends the recording. A failed save keeps
-the file on this device for retry or discard, including after relaunch. An
-unfinished file from a terminated process may need to be discarded. Files left by
-recording errors are also retained: retry validates that the clip is playable,
-and an unreadable file requires explicit discard. Returning while a clip is
-finishing defers camera reconciliation until the operation completes; controls
-remain unavailable while the capture session is interrupted. The gallery
-shows photos and videos, and the play overlay opens a video player. Resolution,
-frame rate, and manual video settings are reserved for a later release.
+Video defaults to 1080p/30 fps H.264 in a QuickTime MOV file with SDR color and
+microphone audio. Settings is available in both capture modes: exposure, focus,
+and white balance have independent values, and the Video section exposes only
+supported resolution/frame-rate combinations, codecs, stabilization modes, and
+continuous light when available. Configuration happens before recording so the
+preview uses the selected format. Changing the camera or applying a preset may
+select compatible fallback values and show a notice; the saved preset is unchanged.
+Camera, mode, and settings changes remain blocked while recording or saving.
+
+Settings always provides access to both Photo and Video profiles, including their
+presets and quick-control layouts. Closing Settings restores the capture mode used
+when opening it.
+
+Video's Microphone selector offers Automatic, iPhone Microphone, and external
+inputs recognized by iOS. Automatic delegates input and direction selection to the
+capture session. While Settings is open and the app is active, available inputs
+refresh every second, including while editing a preset. Connecting a microphone
+updates the list without changing the selected input. When a selected input
+disconnects, the active Video profile returns to the most
+recent available microphone selection, or Automatic if none is available. The
+saved preset keeps its external input preference. Reconnecting does not override
+the fallback selection; select the microphone or preset again to use it. Microphone choices are
+session-only unless saved in a preset, and can also be added to quick controls.
+
+Photo and video values are kept separately **in memory for the current session**;
+relaunching starts with defaults. Only presets and quick-control selection/order
+are persisted locally. Existing presets and quick-control personalization remain
+Photo configurations; Video has its own preset list and quick controls. New photo
+presets also include output format, resolution, timer, and correction. Presets
+exclude camera identifiers and zoom. Editing an applied preset changes the active
+values without updating the saved preset; saving/updating a preset is explicit.
+
+The red button becomes a stop button with elapsed time. Leaving the app or a camera
+interruption ends the recording. A failed save keeps the file for retry or discard,
+including after relaunch. An unfinished or unreadable file requires explicit
+discard. Returning while a clip finishes defers camera reconciliation; controls
+remain unavailable while the session is interrupted. The gallery shows photos and
+videos with in-app playback. HDR, Log, ProRes, and changes during recording are
+outside this release.
 
 > The iOS Simulator does not provide the same camera hardware or capabilities as a physical iPhone. Use a real device when testing capture, flash, focus, exposure, white balance, and lens selection.
 

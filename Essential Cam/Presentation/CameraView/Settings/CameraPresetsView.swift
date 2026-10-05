@@ -1,18 +1,33 @@
+//
+//  CameraPresetsView.swift
+//  Essential Cam
+//
+//  Created by Alexander López.
+//
+
 import SwiftUI
 
 struct CameraPresetsView: View {
     let store: CameraPresetStore
     let controls: CameraControlsController
+    var photoResolutions: [PhotoResolution] = []
 
     @State private var isCreatingPreset = false
 
     var body: some View {
         List {
-            ForEach(Array(store.presets.enumerated()), id: \.element.id) { index, preset in
+            if let error = store.persistenceErrorDescription {
+                Section("Presets Couldn't Be Saved or Loaded") {
+                    Text(error).font(.footnote)
+                    Text("Your existing preset file has been preserved.").font(.footnote)
+                }
+            }
+            ForEach(Array(store.modePresets.enumerated()), id: \.element.id) { index, preset in
                 NavigationLink {
                     CameraPresetEditorView(
                         preset: preset,
                         controls: controls,
+                        photoResolutions: photoResolutions,
                         save: store.save,
                         delete: { store.delete(id: preset.id) }
                     )
@@ -23,20 +38,20 @@ struct CameraPresetsView: View {
             .onMove(perform: store.move)
         }
         .overlay {
-            if store.presets.isEmpty {
+            if store.modePresets.isEmpty {
                 ContentUnavailableView {
                     Label("No Presets", systemImage: "camera.filters")
                 } description: {
-                    Text("Create a preset to save a reusable photo configuration.")
+                    Text("Create a preset to save a reusable \(controls.captureMode.accessibilityName.lowercased()) configuration.")
                 } actions: {
                     Button("Create Preset") { isCreatingPreset = true }
                 }
             }
         }
-        .navigationTitle("Camera Presets")
+        .navigationTitle("\(controls.captureMode.accessibilityName) Presets")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
-            if !store.presets.isEmpty {
+            if !store.modePresets.isEmpty {
                 ToolbarItem(placement: .topBarLeading) {
                     EditButton()
                 }
@@ -51,6 +66,7 @@ struct CameraPresetsView: View {
             CameraPresetEditorView(
                 preset: nil,
                 controls: controls,
+                photoResolutions: photoResolutions,
                 save: store.save,
                 delete: nil
             )
@@ -86,6 +102,7 @@ private struct CameraPresetEditorView: View {
     @Environment(\.dismiss) private var dismiss
 
     let controls: CameraControlsController
+    let photoResolutions: [PhotoResolution]
     let save: (CameraPreset) -> Void
     let delete: (() -> Void)?
 
@@ -96,14 +113,16 @@ private struct CameraPresetEditorView: View {
     init(
         preset: CameraPreset?,
         controls: CameraControlsController,
+        photoResolutions: [PhotoResolution],
         save: @escaping (CameraPreset) -> Void,
         delete: (() -> Void)?
     ) {
         let initialPreset = preset ?? CameraPreset(
             name: "",
-            settings: CameraPresetSettings()
+            settings: CameraPresetSettings(settings: controls.settings)
         )
         self.controls = controls
+        self.photoResolutions = photoResolutions
         self.save = save
         self.delete = delete
         _draft = State(initialValue: initialPreset)
@@ -133,11 +152,28 @@ private struct CameraPresetEditorView: View {
                 Text("This replaces the preset values without changing the active camera configuration.")
             }
 
-            aspectRatioSection
+            if draft.captureMode == .photo { aspectRatioSection }
             exposureSection
             focusSection
             whiteBalanceSection
-            flashSection
+            if draft.captureMode == .photo {
+                flashSection
+                photoSettingsSection
+            } else {
+                Section("Video") {
+                    VideoSettingsEditor(settings: Binding(
+                        get: { draft.settings.video ?? .standard },
+                        set: { value in
+                            var adjusted = value
+                            let rates = controls.videoCapabilities.configurations.filter { $0.resolution == value.resolution }
+                            if !rates.contains(where: { $0.frameRate == value.frameRate }), let fallback = rates.first {
+                                adjusted.frameRate = fallback.frameRate
+                            }
+                            draft.settings.video = adjusted
+                        }
+                    ), capabilities: controls.videoCapabilities)
+                }
+            }
 
             if delete != nil {
                 Section {
@@ -266,6 +302,35 @@ private struct CameraPresetEditorView: View {
                 Text("Automatic").tag(CameraFlashMode.automatic)
             }
             resetButton(for: \.flashMode)
+        }
+    }
+
+    private var photoSettingsSection: some View {
+        Section("Photo Output") {
+            Picker("Image Format", selection: Binding(
+                get: { draft.settings.photoOutputFormat }, set: { draft.settings.photoOutputFormat = $0 }
+            )) {
+                Text("Keep Current").tag(PhotoOutputFormat?.none)
+                ForEach(PhotoOutputFormat.allCases, id: \.self) { Text($0.displayName).tag(Optional($0)) }
+            }
+            Picker("Resolution", selection: Binding(
+                get: { draft.settings.photoResolution }, set: { draft.settings.photoResolution = $0 }
+            )) {
+                Text("Keep Current").tag(PhotoResolution?.none)
+                ForEach(photoResolutions, id: \.self) { Text($0.megapixelDisplayName).tag(Optional($0)) }
+            }
+            Picker("Timer", selection: Binding(
+                get: { draft.settings.photoTimer }, set: { draft.settings.photoTimer = $0 }
+            )) {
+                Text("Keep Current").tag(PhotoTimer?.none)
+                ForEach(PhotoTimer.allCases, id: \.self) { Text($0.displayName).tag(Optional($0)) }
+            }
+            Picker("Content-Aware Correction", selection: Binding(
+                get: { draft.settings.contentAwareCorrection }, set: { draft.settings.contentAwareCorrection = $0 }
+            )) {
+                Text("Keep Current").tag(ContentAwareCorrection?.none)
+                ForEach(ContentAwareCorrection.allCases, id: \.self) { Text($0.displayName).tag(Optional($0)) }
+            }
         }
     }
 
@@ -558,6 +623,10 @@ private extension CameraPresetSettings {
             whiteBalanceName = "Auto WB"
         }
 
+        if captureMode == .video {
+            let values = video ?? .standard
+            return "\(exposureName) · \(values.resolution.displayName) · \(values.frameRate.displayName) · \(values.codec.shortName)"
+        }
         let ratio = (aspectRatio ?? CameraSettings.standard.aspectRatio).displayName
         return "\(exposureName) · \(whiteBalanceName) · \(ratio)"
     }

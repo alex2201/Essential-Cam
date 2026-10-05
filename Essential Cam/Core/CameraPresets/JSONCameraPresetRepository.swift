@@ -1,3 +1,10 @@
+//
+//  JSONCameraPresetRepository.swift
+//  Essential Cam
+//
+//  Created by Alexander López.
+//
+
 import Foundation
 
 actor JSONCameraPresetRepository: CameraPresetRepository {
@@ -6,7 +13,7 @@ actor JSONCameraPresetRepository: CameraPresetRepository {
         var presets: [CameraPreset]
     }
 
-    private static let currentVersion = 1
+    private static let currentVersion = 2
 
     private let fileURL: URL
     private let fileManager: FileManager
@@ -33,6 +40,7 @@ actor JSONCameraPresetRepository: CameraPresetRepository {
 
         let data = try Data(contentsOf: fileURL)
         let file = try decoder.decode(PresetFile.self, from: data)
+        guard (1...Self.currentVersion).contains(file.version) else { throw CocoaError(.coderReadCorrupt) }
         return file.presets
     }
 
@@ -56,6 +64,7 @@ actor JSONCameraPresetRepository: CameraPresetRepository {
     }
 
     func replaceAll(with presets: [CameraPreset]) throws {
+        _ = try self.presets() // Preserve unreadable or newer files instead of silently overwriting them.
         try persist(presets)
     }
 

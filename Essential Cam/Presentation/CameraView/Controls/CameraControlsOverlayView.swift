@@ -93,6 +93,10 @@ struct CameraControlsOverlayView: View {
                     dismiss: { dismiss(.zoom) }
                 )
                 .transition(controlTransition)
+            case let .video(control):
+                VideoQuickSettingView(control: control, controls: viewModel.controls,
+                    dismiss: dismissPresentedControl)
+                    .transition(controlTransition)
             case nil:
                 defaultControls
                     .transition(controlTransition)
@@ -105,7 +109,7 @@ struct CameraControlsOverlayView: View {
 
     private var defaultControls: some View {
         VStack(spacing: 24) {
-            if viewModel.selectedCaptureMode == .photo, !quickSettingsStore.included.isEmpty {
+            if !quickSettingsStore.included.isEmpty {
                 QuickAccessControlsView(
                     controls: viewModel.controls,
                     showAspectRatioSelector: { present(.aspectRatio) },
@@ -113,7 +117,8 @@ struct CameraControlsOverlayView: View {
                     showPhotoResolutionSelector: { present(.photoResolution) },
                     showExposureEditor: { present(.exposure) },
                     showFocusEditor: { present(.focus) },
-                    showWhiteBalanceEditor: { present(.whiteBalance) }
+                    showWhiteBalanceEditor: { present(.whiteBalance) },
+                    showVideoSetting: { present(.video($0)) }
                 )
             }
 
@@ -197,6 +202,7 @@ struct CameraControlsOverlayView: View {
 }
 
 private enum PresentedCameraControl: Equatable {
+    case video(QuickSettingControl)
     case photoTimer
     case photoResolution
     case aspectRatio
