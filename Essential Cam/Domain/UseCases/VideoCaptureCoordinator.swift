@@ -66,12 +66,21 @@ actor VideoCaptureCoordinator: VideoCaptureCoordinating {
         }
         do {
             try Task.checkCancellation()
-            try await recording.recordVideo(to: url, didStart: didStart)
         } catch {
-            // An unsuccessful recording is not offered as a playable clip.
-            // Keep a failed cleanup blocking the next capture until discarded.
+            // No recording has been requested yet, so there is no clip to recover.
             do { try await store.discard() } catch { throw VideoCaptureError.pendingStorageFailed }
             throw error
+        }
+        do {
+            try await recording.recordVideo(to: url, didStart: didStart)
+        } catch {
+            // Preserve files left by a failed attempt. Once recording returns,
+            // the store validates the file before allowing a retry.
+            didFinish()
+            do { pendingURL = try await store.load() } catch {
+                throw VideoCaptureError.pendingStorageFailed
+            }
+            throw pendingURL == nil ? VideoCaptureError.recordingFailed : .saveFailed
         }
         didFinish()
         pendingURL = url

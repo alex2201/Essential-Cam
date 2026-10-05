@@ -49,17 +49,88 @@ struct VideoCaptureTests {
         #expect(!FileManager.default.fileExists(atPath: directory.path))
     }
 
-    @Test func failedRecordingDoesNotImportPartialFile() async throws {
+    @Test func failedRecordingRetainsUnplayableFileForExplicitDiscard() async throws {
         let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         defer { try? FileManager.default.removeItem(at: directory) }
         let saving = TestVideoSaving()
         let coordinator = VideoCaptureCoordinator(recording: TestVideoRecording(shouldFail: true), saving: saving, store: PendingVideoStore(directoryURL: directory))
-        await #expect(throws: VideoCaptureError.recordingFailed) {
+        await #expect(throws: VideoCaptureError.pendingStorageFailed) {
             try await coordinator.record(didStart: {}, didFinish: {})
         }
         #expect(await saving.count == 0)
-        #expect(await coordinator.hasPendingVideo() == false)
+        #expect(FileManager.default.fileExists(atPath: directory.appendingPathComponent("recording.mov").path))
+        await #expect(throws: VideoCaptureError.pendingStorageFailed) { try await coordinator.retrySave() }
+        let restored = VideoCaptureCoordinator(recording: TestVideoRecording(), saving: saving, store: PendingVideoStore(directoryURL: directory))
+        await #expect(throws: VideoCaptureError.pendingStorageFailed) { _ = try await restored.restorePendingVideo() }
+        try await restored.discard()
         #expect(!FileManager.default.fileExists(atPath: directory.path))
+    }
+
+    @Test func failedRecordingWithRecoverableFileCanBeRetriedWithoutRecordingAgain() async throws {
+        let recording = TestVideoRecording(shouldFail: true)
+        let saving = TestVideoSaving()
+        let store = TestVideoStore(recoverableFile: true)
+        let coordinator = VideoCaptureCoordinator(recording: recording, saving: saving, store: store)
+        await #expect(throws: VideoCaptureError.saveFailed) {
+            try await coordinator.record(didStart: {}, didFinish: {})
+        }
+        #expect(await coordinator.hasPendingVideo())
+        #expect(await saving.count == 0)
+        #expect(await store.discarded == false)
+        await #expect(throws: VideoCaptureError.operationInProgress) {
+            try await coordinator.record(didStart: {}, didFinish: {})
+        }
+        try await coordinator.retrySave()
+        #expect(await saving.count == 1)
+        #expect(await recording.count == 1)
+        #expect(await coordinator.hasPendingVideo() == false)
+    }
+
+    @Test func playableFileLeftInRecordingStateIsRecoveredAfterRelaunch() async throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let store = PendingVideoStore(directoryURL: directory)
+        let url = try await store.prepareRecording()
+        let writer = try AVAssetWriter(outputURL: url, fileType: .mov)
+        let input = AVAssetWriterInput(mediaType: .video, outputSettings: [
+            AVVideoCodecKey: AVVideoCodecType.h264,
+            AVVideoWidthKey: 32,
+            AVVideoHeightKey: 32
+        ])
+        let adaptor = AVAssetWriterInputPixelBufferAdaptor(assetWriterInput: input, sourcePixelBufferAttributes: [
+            kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_32BGRA,
+            kCVPixelBufferWidthKey as String: 32,
+            kCVPixelBufferHeightKey as String: 32
+        ])
+        writer.add(input)
+        try #require(writer.startWriting())
+        writer.startSession(atSourceTime: .zero)
+        var pixelBuffer: CVPixelBuffer?
+        try #require(CVPixelBufferCreate(kCFAllocatorDefault, 32, 32, kCVPixelFormatType_32BGRA, nil, &pixelBuffer) == kCVReturnSuccess)
+        let buffer = try #require(pixelBuffer)
+        CVPixelBufferLockBaseAddress(buffer, [])
+        if let base = CVPixelBufferGetBaseAddress(buffer) {
+            memset(base, 0, CVPixelBufferGetDataSize(buffer))
+        }
+        CVPixelBufferUnlockBaseAddress(buffer, [])
+        for _ in 0..<100 where !input.isReadyForMoreMediaData {
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        try #require(input.isReadyForMoreMediaData)
+        try #require(adaptor.append(buffer, withPresentationTime: .zero))
+        try #require(adaptor.append(buffer, withPresentationTime: CMTime(value: 1, timescale: 30)))
+        input.markAsFinished()
+        writer.finishWriting {}
+        for _ in 0..<200 where writer.status == .writing {
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        if writer.status == .writing { writer.cancelWriting() }
+        try #require(writer.status == .completed)
+        let restored = PendingVideoStore(directoryURL: directory)
+        #expect(try await restored.load() == url)
+        // Validation also persists readiness so another relaunch can recover it.
+        #expect(try await PendingVideoStore(directoryURL: directory).load() == url)
+        try await restored.discard()
     }
 
     @Test func savedTombstonePreventsReimportAfterRelaunch() async throws {
@@ -153,14 +224,16 @@ private actor TestVideoSaving: VideoSaving {
 private actor TestVideoStore: PendingVideoStoring {
     private let failCleanup: Bool
     private let holdPreparation: Bool
+    private let recoverableFile: Bool
     private var preparation: CheckedContinuation<Void, Never>?
     private var preparingWaiter: CheckedContinuation<Void, Never>?
     private var preparing = false
     private(set) var markedSaved = false
     private(set) var discarded = false
-    init(failCleanup: Bool = false, holdPreparation: Bool = false) {
+    init(failCleanup: Bool = false, holdPreparation: Bool = false, recoverableFile: Bool = false) {
         self.failCleanup = failCleanup
         self.holdPreparation = holdPreparation
+        self.recoverableFile = recoverableFile
     }
     func prepareRecording() async -> URL {
         preparing = true
@@ -180,7 +253,7 @@ private actor TestVideoStore: PendingVideoStoring {
     func finishPreparing() { preparation?.resume(); preparation = nil }
     func markReady() {}
     func markSaved() { markedSaved = true }
-    func load() -> URL? { nil }
+    func load() -> URL? { recoverableFile ? URL(fileURLWithPath: "/nonexistent/test-video.mov") : nil }
     func discard() throws {
         if failCleanup { throw VideoCaptureError.pendingStorageFailed }
         discarded = true

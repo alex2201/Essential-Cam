@@ -6,6 +6,7 @@
 //
 
 import Foundation
+import AVFoundation
 import CoreGraphics
 import ImageIO
 import Testing
@@ -353,6 +354,52 @@ struct Essential_CamTests {
 
         #expect(lifecycle.updateScene(isActive: false, isBackground: true) == false)
         #expect(lifecycle.takePendingRecovery() == nil)
+    }
+
+    @Test @MainActor func foregroundCheckDuringSaveIsDeferredUntilOperationFinishes() {
+        let lifecycle = CameraLifecycleController()
+        #expect(!lifecycle.shouldReconcile(operationInProgress: true))
+        #expect(lifecycle.takePendingReconciliation())
+        #expect(!lifecycle.takePendingReconciliation())
+        #expect(lifecycle.shouldReconcile(operationInProgress: false))
+    }
+
+    @Test @MainActor func backgroundClearsDeferredCheckAndForegroundChecksAgain() {
+        let lifecycle = CameraLifecycleController()
+        #expect(!lifecycle.shouldReconcile(operationInProgress: true))
+        _ = lifecycle.updateScene(isActive: false, isBackground: true)
+        #expect(!lifecycle.takePendingReconciliation())
+        #expect(!lifecycle.shouldReconcile(operationInProgress: false))
+        _ = lifecycle.updateScene(isActive: true, isBackground: false)
+        #expect(!lifecycle.takePendingReconciliation())
+        #expect(lifecycle.shouldReconcile(operationInProgress: false))
+    }
+
+    @Test func runningButInterruptedSessionIsNotAvailable() {
+        let interrupted = CameraSessionSnapshot(isConfigured: true, isRunning: true, isInterrupted: true, selectedCamera: nil)
+        let stopped = CameraSessionSnapshot(isConfigured: true, isRunning: false, isInterrupted: false, selectedCamera: nil)
+        let running = CameraSessionSnapshot(isConfigured: true, isRunning: true, isInterrupted: false, selectedCamera: nil)
+        #expect(!interrupted.isAvailable)
+        #expect(!stopped.isAvailable)
+        #expect(running.isAvailable)
+    }
+
+    @Test func transientWhiteBalanceGainsStayWithinConversionRange() throws {
+        let gains = AVCaptureDevice.WhiteBalanceGains(redGain: 0, greenGain: 2, blueGain: 8)
+        let supported = try #require(gains.clamped(maximumGain: 4))
+        #expect(supported.redGain == 1)
+        #expect(supported.greenGain == 2)
+        #expect(supported.blueGain == 4)
+    }
+
+    @Test func nonfiniteWhiteBalanceReadingsAreNotConverted() {
+        for invalid: Float in [.nan, .infinity, -.infinity] {
+            #expect(AVCaptureDevice.WhiteBalanceGains(redGain: invalid, greenGain: 1, blueGain: 1).clamped(maximumGain: 4) == nil)
+            #expect(AVCaptureDevice.WhiteBalanceGains(redGain: 1, greenGain: invalid, blueGain: 1).clamped(maximumGain: 4) == nil)
+            #expect(AVCaptureDevice.WhiteBalanceGains(redGain: 1, greenGain: 1, blueGain: invalid).clamped(maximumGain: 4) == nil)
+            #expect(AVCaptureDevice.WhiteBalanceGains(redGain: 1, greenGain: 1, blueGain: 1).clamped(maximumGain: invalid) == nil)
+        }
+        #expect(AVCaptureDevice.WhiteBalanceGains(redGain: 1, greenGain: 1, blueGain: 1).clamped(maximumGain: 0) == nil)
     }
 
     @Test func pngExportBakesOrientationIntoPixelsWithoutRotatingMetadata() throws {

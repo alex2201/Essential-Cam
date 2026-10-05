@@ -1,3 +1,10 @@
+//
+//  CameraLifecycleController.swift
+//  Essential Cam
+//
+//  Created by Codex on 04/10/26.
+//
+
 import Foundation
 
 /// Owns camera lifecycle observation and delayed health checks. It does not
@@ -7,6 +14,7 @@ final class CameraLifecycleController {
     private var sessionEventsTask: Task<Void, Never>?
     private var foregroundHealthCheckTask: Task<Void, Never>?
     private(set) var isSceneActive = true
+    private var pendingReconciliation = false
     private var pendingRecovery: CameraFailure?
 
     func startMonitoring(
@@ -27,6 +35,7 @@ final class CameraLifecycleController {
         isSceneActive = isActive
         if isBackground {
             pendingRecovery = nil
+            pendingReconciliation = false
             foregroundHealthCheckTask?.cancel()
             return false
         }
@@ -47,6 +56,23 @@ final class CameraLifecycleController {
             guard !Task.isCancelled, isSceneActive else { return }
             await handler()
         }
+    }
+
+    /// Defer foreground checks until capture/save completes instead of dropping them.
+    func shouldReconcile(operationInProgress: Bool) -> Bool {
+        guard isSceneActive else { return false }
+        if operationInProgress {
+            pendingReconciliation = true
+            return false
+        }
+        pendingReconciliation = false
+        return true
+    }
+
+    func takePendingReconciliation() -> Bool {
+        guard isSceneActive else { return false }
+        defer { pendingReconciliation = false }
+        return pendingReconciliation
     }
 
     func recoveryToRun(

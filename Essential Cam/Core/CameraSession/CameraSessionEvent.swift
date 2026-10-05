@@ -1,9 +1,19 @@
+//
+//  CameraSessionEvent.swift
+//  Essential Cam
+//
+//  Created by Codex on 04/10/26.
+//
+
 import Foundation
 
 struct CameraSessionSnapshot: Sendable {
     let isConfigured: Bool
     let isRunning: Bool
+    let isInterrupted: Bool
     let selectedCamera: Camera?
+
+    var isAvailable: Bool { isRunning && !isInterrupted }
 }
 
 enum CameraInterruption: Equatable, Sendable {

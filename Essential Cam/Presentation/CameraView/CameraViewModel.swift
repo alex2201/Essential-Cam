@@ -179,7 +179,6 @@ final class CameraViewModel {
         case .unauthorized, .failed, .idle:
             await recoverCamera()
         case .interrupted(.appInactive):
-            cameraStatus = .running
             scheduleForegroundHealthCheck()
         case .requestingPermission, .starting, .running, .interrupted, .recovering:
             scheduleForegroundHealthCheck()
@@ -579,17 +578,35 @@ final class CameraViewModel {
     private func finishOperation() {
         captureCountdown = nil
         operation = .none
-        guard let failure = lifecycle.takePendingRecovery() else { return }
-        Task { await recoverCamera(failure: failure) }
+        if let failure = lifecycle.takePendingRecovery() {
+            Task { await requestRecovery(failure: failure) }
+        } else if lifecycle.takePendingReconciliation() {
+            scheduleForegroundHealthCheck()
+        }
     }
 
     private func reconcileCameraState() async {
+        guard lifecycle.shouldReconcile(operationInProgress: operation != .none) else { return }
         let snapshot = await cameraSession.snapshot()
-        if snapshot.isRunning {
-            cameraStatus = .running
-            return
+        // A capture or background transition can occur while awaiting the actor.
+        guard lifecycle.shouldReconcile(operationInProgress: operation != .none) else { return }
+        if snapshot.isInterrupted {
+            if case .interrupted = cameraStatus { return }
+            cameraStatus = .interrupted(.unknown)
+        } else if snapshot.isAvailable {
+            await controls.synchronizeWithCamera()
+            let refreshedSnapshot = await cameraSession.snapshot()
+            guard lifecycle.shouldReconcile(operationInProgress: operation != .none) else { return }
+            if refreshedSnapshot.isInterrupted {
+                cameraStatus = .interrupted(.unknown)
+            } else if refreshedSnapshot.isAvailable {
+                cameraStatus = .running
+            } else {
+                await requestRecovery()
+            }
+        } else {
+            await requestRecovery()
         }
-        await recoverCamera()
     }
 
     private func scheduleForegroundHealthCheck() {
@@ -599,7 +616,7 @@ final class CameraViewModel {
     }
 
     private func recoverCamera(failure: CameraFailure = .cameraUnavailable) async {
-        guard operation == .none else { return }
+        guard lifecycle.isSceneActive, operation == .none else { return }
         operation = .recovering
         cameraStatus = .recovering
         defer { finishOperation() }
@@ -613,7 +630,10 @@ final class CameraViewModel {
             await refreshPhotoOutputFormats()
             await refreshPhotoResolutions()
             await controls.synchronizeWithCamera()
-            cameraStatus = .running
+            let snapshot = await cameraSession.snapshot()
+            guard lifecycle.isSceneActive else { return }
+            cameraStatus = snapshot.isInterrupted ? .interrupted(.unknown)
+                : (snapshot.isAvailable ? .running : .failed(failure))
         } catch let error {
             // TODO: Track this error with the integrated logging service.
             switch error {

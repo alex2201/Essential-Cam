@@ -94,6 +94,7 @@ actor CameraSession {
         CameraSessionSnapshot(
             isConfigured: isSetUp,
             isRunning: captureSession.isRunning,
+            isInterrupted: captureSession.isInterrupted,
             selectedCamera: selectedCamera()
         )
     }
@@ -164,11 +165,13 @@ actor CameraSession {
     }
 
     func whiteBalanceCapabilities() -> CameraWhiteBalanceCapabilities? {
-        guard let device = activeVideoInput?.device else { return nil }
+        guard !captureSession.isInterrupted,
+              let device = activeVideoInput?.device,
+              let gains = device.deviceWhiteBalanceGains.clamped(maximumGain: device.maxWhiteBalanceGain) else {
+            return nil
+        }
 
-        let currentValues = device.temperatureAndTintValues(
-            for: device.deviceWhiteBalanceGains
-        )
+        let currentValues = device.temperatureAndTintValues(for: gains)
 
         return CameraWhiteBalanceCapabilities(
             supportsContinuousAutoWhiteBalance: device.isWhiteBalanceModeSupported(

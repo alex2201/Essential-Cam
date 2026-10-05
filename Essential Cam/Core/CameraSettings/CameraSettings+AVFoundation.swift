@@ -112,3 +112,16 @@ extension CameraAspectRatio {
         }
     }
 }
+
+// Device readings can be transiently invalid while capture is interrupted.
+extension AVCaptureDevice.WhiteBalanceGains {
+    func clamped(maximumGain: Float) -> Self? {
+        guard maximumGain.isFinite, maximumGain >= 1,
+              redGain.isFinite, greenGain.isFinite, blueGain.isFinite else { return nil }
+        return Self(
+            redGain: min(max(redGain, 1), maximumGain),
+            greenGain: min(max(greenGain, 1), maximumGain),
+            blueGain: min(max(blueGain, 1), maximumGain)
+        )
+    }
+}

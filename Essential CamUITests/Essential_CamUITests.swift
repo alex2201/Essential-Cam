@@ -237,7 +237,8 @@ final class Essential_CamUITests: XCTestCase {
             XCTAssertTrue(app.buttons["Stop Recording"].waitForExistence(timeout: 10))
             Thread.sleep(forTimeInterval: 3)
             XCUIDevice.shared.press(.home)
-            Thread.sleep(forTimeInterval: 3)
+            // Return immediately to exercise foreground reconciliation while
+            // the clip may still be finalizing or saving.
             app.activate()
             XCTAssertTrue(record.waitForExistence(timeout: 20))
             expectation(for: enabled, evaluatedWith: record)

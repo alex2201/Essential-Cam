@@ -100,7 +100,11 @@ mode, and settings changes are blocked until the clip finishes saving. The red
 button starts recording and becomes a stop button with an elapsed-time display.
 Leaving the app or a camera interruption ends the recording. A failed save keeps
 the file on this device for retry or discard, including after relaunch. An
-unfinished file from a terminated process may need to be discarded. The gallery
+unfinished file from a terminated process may need to be discarded. Files left by
+recording errors are also retained: retry validates that the clip is playable,
+and an unreadable file requires explicit discard. Returning while a clip is
+finishing defers camera reconciliation until the operation completes; controls
+remain unavailable while the capture session is interrupted. The gallery
 shows photos and videos, and the play overlay opens a video player. Resolution,
 frame rate, and manual video settings are reserved for a later release.
 
