@@ -14,6 +14,7 @@ struct CameraView: View {
     @Environment(\.openURL) private var openURL
     @Environment(CameraPresetStore.self) private var presetStore
     @Environment(QuickSettingsStore.self) private var quickSettingsStore
+    @State private var guidesStore = CompositionGuidesStore()
     @State private var viewModel = CameraViewModel()
     @State private var orientationController = CameraOrientationController()
     @State private var isSettingsPresented = false
@@ -124,6 +125,7 @@ struct CameraView: View {
             presetStore.activate(settings.captureMode)
             presetStore.updateUnselectedSettings(settings)
         }
+        .environment(guidesStore)
         .alert(item: $viewModel.activeAlert, content: alert(for:))
         .onChange(of: orientationController.orientation, initial: true) { _, orientation in
             if let orientation { viewModel.updateCaptureOrientation(orientation) }

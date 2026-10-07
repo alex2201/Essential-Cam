@@ -38,6 +38,7 @@ struct CameraCaptureView: View {
                         Color.clear
 
                         CameraPreview(session: viewModel.captureSession, isVideoMode: viewModel.selectedCaptureMode == .video)
+                            .overlay { CompositionGuidesOverlay() }
                             .aspectRatio(previewWidthToHeight, contentMode: .fit)
                             .clipped()
                             .frame(

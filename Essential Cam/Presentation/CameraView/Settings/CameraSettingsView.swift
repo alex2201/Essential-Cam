@@ -35,6 +35,11 @@ struct CameraSettingsView: View {
                     Text("Edit either profile. Closing Settings returns to your original capture mode.")
                 }
 
+                Section("Composition") {
+                    NavigationLink("Composition Guides") { CompositionGuidesSettingsView() }
+                        .accessibilityIdentifier("settings.guides")
+                }
+
                 Section("Camera") {
                     NavigationLink("Lens") { LensSettingsView(viewModel: viewModel) }
                     NavigationLink("Camera") { CameraPositionSettingsView(viewModel: viewModel) }

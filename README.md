@@ -7,6 +7,7 @@ The project focuses on capturing clean, editing-ready photos with Apple's camera
 ## Features
 
 - Live camera preview with a portrait-only interface
+- Independently selectable composition guides: rule of thirds, center, 4×4 grid, golden ratio, and diagonals, with independent customizable colors (yellow by default)
 - Device-orientation detection and in-place camera-icon and text rotation for vertical, upside-down, and horizontal positioning toward either side
 - Photo capture and automatic saving to the Photo Library
 - SDR video recording with microphone audio, supported 1080p/4K resolutions and 24/25/30/50/60 fps
@@ -138,6 +139,18 @@ videos with in-app playback. HDR, Log, ProRes, and changes during recording are
 outside this release.
 
 > The iOS Simulator does not provide the same camera hardware or capabilities as a physical iPhone. Use a real device when testing capture, flash, focus, exposure, white balance, and lens selection.
+
+### Composition guides
+
+Open **Settings > Composition Guides** to enable any combination of the five
+guides and choose a separate color for each one. Guides start disabled, with yellow
+as each guide’s default color; its **Reset Color to Yellow** button restores it
+independently. Selection and colors are saved locally
+across launches and shared between Photo and Video, independently of presets.
+The guides follow the visible preview frame when the aspect ratio changes and
+appear only on screen; they are not included in captured photos or videos.
+The golden-ratio guide uses a grid, not a spiral. Diagonals connect opposite
+corners, and Center shows a small cross.
 
 ### Device orientation
 
